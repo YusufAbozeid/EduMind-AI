@@ -1,12 +1,11 @@
+import os
 import re
-from threading import Thread
-from typing import Any, Generator
+from typing import Generator
 import streamlit as st
-import torch
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer
+from langchain_groq import ChatGroq
 
 try:
     from PyPDF2 import PdfReader
@@ -19,68 +18,47 @@ SUGGESTED_PROMPTS = [
     "Explain the key formula",
 ]
 
-@st.cache_resource
-def load_model():
-    MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    try:
-        from transformers import BitsAndBytesConfig
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        model = AutoModelForCausalLM.from_pretrained(
-            MODEL_NAME,
-            quantization_config=quantization_config,
-            device_map="auto"
-        )
-    except Exception:
-        model = AutoModelForCausalLM.from_pretrained(
-            MODEL_NAME,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
-        )
-        model.to(device)
-        
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    return tokenizer, model, device
+def get_groq_llm(streaming: bool = False, temperature: float = 0.2):
+    groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+    groq_model = os.getenv("GROQ_MODEL") or st.secrets.get("GROQ_MODEL", "llama-3.1-8b-instant")
+    return ChatGroq(
+        groq_api_key=groq_api_key,
+        model_name=groq_model,
+        streaming=streaming,
+        temperature=temperature
+    )
 
-
-tokenizer, model, device = load_model()
 
 @st.cache_resource
 def get_embeddings():
-    return HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
-    
-@st.cache_resource    
+    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+
+@st.cache_resource
 def process_pdf_to_vectorstore(pdf_file):
-    if isinstance(pdf_file, str):
-        text = pdf_file
-    else:
-        if PdfReader is None:
-            raise ImportError("PyPDF2 is required to process PDF files.")
-        pdf_reader = PdfReader(pdf_file)
-        text = ""
-        for page in pdf_reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text
+    if PdfReader is None:
+        raise ImportError("PyPDF2 is not installed.")
+    pdf_reader = PdfReader(pdf_file)
+    text = ""
+    for page in pdf_reader.pages:
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
-    chunks = splitter.split_text(text)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = text_splitter.split_text(text)
+
     embeddings = get_embeddings()
-
-    return FAISS.from_texts(texts=chunks, embedding=embeddings)
+    vectorstore = FAISS.from_texts(chunks, embedding=embeddings)
+    return vectorstore
 
 
 def get_qwen_response(query, vectorstore, history=None) -> Generator[str, None, None]:
     docs = vectorstore.similarity_search(query, k=3)
     context = "\n\n".join([doc.page_content for doc in docs])
 
-    prompt = f"""
-You are an AI assistant.
+    prompt = f"""You are an AI assistant.
 
 Context from PDF:
 {context}
@@ -92,53 +70,41 @@ Instructions:
 1. Answer using the PDF context whenever possible.
 2. If the PDF does not contain the answer, answer from your own knowledge.
 3. Keep the answer concise.
-
-Answer:
 """
+    messages = [("system", "You are a helpful assistant.")]
 
-    messages = [{"role": "system", "content": "You are a helpful assistant."}]
-    
     if history:
-        messages.extend(history[-6:])
+        for item in history[-6:]:
+            if isinstance(item, dict):
+                messages.append((item.get("role", "user"), item.get("content", "")))
 
-    messages.append({"role": "user", "content": prompt})
+    messages.append(("user", prompt))
 
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-    streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
-    
-    generation_kwargs = dict(
-        **inputs,
-        max_new_tokens=512,
-        temperature=0.2,
-        do_sample=True,
-        streamer=streamer
-    )
-    thread = Thread(target=model.generate, kwargs=generation_kwargs)
-    thread.start()
-    for new_text in streamer:
-        yield new_text
+    llm = get_groq_llm(streaming=True, temperature=0.2)
+    for chunk in llm.stream(messages):
+        if chunk.content:
+            yield chunk.content
 
 
-def pdf_answer(question: str, vectorstore, history=None) -> Generator[str, None, None]:
-    yield from get_qwen_response(question, vectorstore, history=history)
+def pdf_answer(vectorstore, query):
+    docs = vectorstore.similarity_search(query, k=3)
+    context = "\n".join([doc.page_content for doc in docs])
+
+    llm = get_groq_llm(temperature=0.2)
+    prompt = f"بناءً على النص التالي من المستند:\n{context}\n\nأجب على السؤال التالي دقة وبوضوح:\n{query}"
+    response = llm.invoke(prompt)
+    return response.content
 
 
 def get_formula_response(question: str, vectorstore, history=None) -> str:
     search_query = f"formula equation mathematical expression {question}"
     docs = vectorstore.similarity_search(search_query, k=5)
     context = "\n\n".join([doc.page_content for doc in docs])
-    
+
     if not context or len(context) < 50:
         return "I couldn't find any formula-related content in the PDF. Please make sure the PDF contains mathematical content."
 
-    prompt = f"""
-You are a precise AI assistant. The user is asking about a formula or equation from the PDF.
+    prompt = f"""You are a precise AI assistant. The user is asking about a formula or equation from the PDF.
 
 PDF CONTENT (USE THIS EXACTLY):
 {context}
@@ -157,62 +123,32 @@ Response format:
 - First show the formula as it appears in the PDF
 - Then explain what each part means based on the PDF
 - Finally, explain the significance of the formula from the PDF context
-
-Remember: ONLY USE INFORMATION FROM THE PDF CONTENT ABOVE.
 """
-
     messages = [
-        {
-            "role": "system",
-            "content": "You are a strict assistant that ONLY uses the provided PDF content. Never use external knowledge."
-        },
+        ("system", "You are a strict assistant that ONLY uses the provided PDF content. Never use external knowledge."),
+        ("user", prompt)
     ]
-    
-    if history:
-        messages.extend(history[-6:])
-    
-    messages.append({"role": "user", "content": prompt})
 
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=512,
-        temperature=0.1,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id
-    )
-
-    response = tokenizer.decode(
-        outputs[0][inputs.input_ids.shape[1]:],
-        skip_special_tokens=True
-    )
-    
-    return response.strip()
+    llm = get_groq_llm(temperature=0.1)
+    response = llm.invoke(messages)
+    return response.content.strip()
 
 
 def generate_quiz_questions(vectorstore, num_questions: int = 5) -> list[dict]:
     search_query = "key concepts definitions main ideas important details core principles"
     docs = vectorstore.similarity_search(search_query, k=6)
     context = "\n\n---\n\n".join([doc.page_content for doc in docs])
-    
+
     if not context or len(context) < 100:
         return [{
             "question": "I couldn't find enough content in your PDF to generate questions. Please make sure the PDF contains readable text.",
             "answer": "Upload a PDF with more content."
         }]
-    
+
     if len(context) > 5000:
         context = context[:5000] + "..."
-    
-    prompt = f"""
-You are creating a quiz based ONLY on the PDF content below.
+
+    prompt = f"""You are creating a quiz based ONLY on the PDF content below.
 
 PDF CONTENT (USE THIS EXACTLY):
 {context}
@@ -234,40 +170,19 @@ IMPORTANT RULES:
 - Questions must be answerable from the PDF content
 - Each question should have ONE correct answer
 - Answers should be directly from the PDF text
-
-RESPONSE:
 """
-    
     messages = [
-        {"role": "system", "content": "You are a strict assistant that ONLY uses the provided PDF content to create quiz questions."},
-        {"role": "user", "content": prompt}
+        ("system", "You are a strict assistant that ONLY uses the provided PDF content to create quiz questions."),
+        ("user", prompt)
     ]
-    
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
-    
-    inputs = tokenizer(text, return_tensors="pt").to(model.device)
-    
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=600,
-        temperature=0.2,
-        do_sample=True,
-        pad_token_id=tokenizer.eos_token_id
-    )
-    
-    response = tokenizer.decode(
-        outputs[0][inputs.input_ids.shape[1]:],
-        skip_special_tokens=True
-    )
-    
+
+    llm = get_groq_llm(temperature=0.2)
+    response_text = llm.invoke(messages).content
+
     questions = []
     q_pattern = r'Q(\d+):\s*(.*?)\s*A\1:\s*(.*?)(?=Q\d+:|$)'
-    matches = re.findall(q_pattern, response, re.DOTALL)
-    
+    matches = re.findall(q_pattern, response_text, re.DOTALL)
+
     if matches:
         for match in matches:
             _, question_text, answer_text = match
@@ -276,10 +191,10 @@ RESPONSE:
                 "answer": answer_text.strip()
             })
     else:
-        lines = response.strip().split('\n')
+        lines = response_text.strip().split('\n')
         current_q = None
         current_a = None
-        
+
         for line in lines:
             line = line.strip()
             if re.match(r'^Q\d+:', line):
@@ -294,36 +209,36 @@ RESPONSE:
                 questions.append({"question": current_q, "answer": current_a})
                 current_q = None
                 current_a = None
-        
+
         if current_q and current_a:
             questions.append({"question": current_q, "answer": current_a})
-    
+
     if not questions:
         questions = [{
             "question": "What is the main topic of this PDF?",
             "answer": context[:200] if context else "No content found."
         }]
-    
+
     return questions[:num_questions]
 
 
 def check_answer(user_answer: str, correct_answer: str) -> bool:
     user_clean = user_answer.lower().strip()
     correct_clean = correct_answer.lower().strip()
-    
+
     if user_clean == correct_clean:
         return True
-    
+
     stopwords = {'the', 'a', 'an', 'of', 'to', 'for', 'with', 'on', 'at', 'from', 'by', 'in', 'as', 'is', 'was', 'are', 'were'}
-    
+
     correct_words = [word for word in correct_clean.split() if word not in stopwords]
     user_words = [word for word in user_clean.split() if word not in stopwords]
-    
+
     if correct_words:
         matches = sum(1 for word in correct_words if word in user_words)
         match_percentage = matches / len(correct_words)
-        
+
         if match_percentage >= 0.6:
             return True
-    
+
     return False
