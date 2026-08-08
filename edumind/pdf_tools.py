@@ -117,14 +117,18 @@ def pdf_answer(arg1, arg2, history=None, **kwargs):
     docs = vectorstore.similarity_search(query, k=3)
     context = "\n".join([doc.page_content for doc in docs])
 
-    messages = [("system", "You are a helpful assistant that answers questions based on the provided PDF context.")]
+    messages = [("system", "You are an AI assistant that answers questions based on the provided PDF context. Always respond in the EXACT same language as the user's question (e.g., respond in English if asked in English, respond in Arabic if asked in Arabic).")]
 
     if history:
         for item in history[-6:]:
             if isinstance(item, dict):
                 messages.append((item.get("role", "user"), item.get("content", "")))
 
-    prompt = f"بناءً على النص التالي من المستند:\n{context}\n\nأجب على السؤال التالي بدقة وبوضوح:\n{query}"
+    prompt = f"""Based on the following document context:
+{context}
+
+Please answer the question accurately, concisely, and in the SAME language as the question:
+{query}"""
     messages.append(("user", prompt))
 
     llm = get_groq_llm(temperature=0.2)
