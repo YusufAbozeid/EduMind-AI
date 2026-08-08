@@ -20,10 +20,19 @@ SUGGESTED_PROMPTS = [
 
 
 def get_groq_llm(streaming: bool = False, temperature: float = 0.2):
-    groq_api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
-    groq_model = os.getenv("GROQ_MODEL") or st.secrets.get("GROQ_MODEL", "llama-3.1-8b-instant")
+    api_key = None
+    if "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
+    else:
+        api_key = os.getenv("GROQ_API_KEY")
+
+    if not api_key:
+        raise ValueError("Groq API Key is missing! Please configure GROQ_API_KEY in Streamlit Secrets.")
+
+    groq_model = st.secrets.get("GROQ_MODEL", os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"))
+
     return ChatGroq(
-        groq_api_key=groq_api_key,
+        groq_api_key=api_key,
         model_name=groq_model,
         streaming=streaming,
         temperature=temperature
