@@ -72,68 +72,42 @@ def _extract_args(arg1, arg2):
     return None, str(arg1 or arg2)
 
 
-def get_qwen_response(arg1, arg2, history=None, **kwargs) -> Generator[str, None, None]:
-    vectorstore, query = _extract_args(arg1, arg2)
-    if not vectorstore:
-        yield "Error: Vectorstore not initialized. Please re-upload your PDF file."
-        return
+def get_rag_response(
+    vectorstore, 
+    query: str, 
+    history: list = None, 
+    streaming: bool = True
+) -> Generator[str, None, None] | str:
+    
+    if not hasattr(vectorstore, "similarity_search"):
+        vectorstore, query = _extract_args(vectorstore, query)
 
     docs = vectorstore.similarity_search(query, k=3)
     context = "\n\n".join([doc.page_content for doc in docs])
 
-    prompt = f"""You are an AI assistant.
-
-Context from PDF:
-{context}
-
-User Question:
-{query}
-
-Instructions:
-1. Answer using the PDF context whenever possible.
-2. If the PDF does not contain the answer, answer from your own knowledge.
-3. Keep the answer concise.
-"""
-    messages = [("system", "You are a helpful assistant.")]
+    messages = [
+        ("system", "You are an AI assistant. Answer strictly based on the provided PDF context. "
+                   "Always respond in the EXACT same language as the user's question.")
+    ]
 
     if history:
         for item in history[-6:]:
             if isinstance(item, dict):
                 messages.append((item.get("role", "user"), item.get("content", "")))
 
+    prompt = f"Context from PDF:\n{context}\n\nUser Question:\n{query}"
     messages.append(("user", prompt))
 
-    llm = get_groq_llm(streaming=True, temperature=0.2)
-    for chunk in llm.stream(messages):
-        if chunk.content:
-            yield chunk.content
+    llm = get_groq_llm(streaming=streaming, temperature=0.2)
 
-
-def pdf_answer(arg1, arg2, history=None, **kwargs):
-    vectorstore, query = _extract_args(arg1, arg2)
-    if not vectorstore:
-        return "Error: Vectorstore not initialized. Please re-upload your PDF file."
-
-    docs = vectorstore.similarity_search(query, k=3)
-    context = "\n".join([doc.page_content for doc in docs])
-
-    messages = [("system", "You are an AI assistant that answers questions based on the provided PDF context. Always respond in the EXACT same language as the user's question (e.g., respond in English if asked in English, respond in Arabic if asked in Arabic).")]
-
-    if history:
-        for item in history[-6:]:
-            if isinstance(item, dict):
-                messages.append((item.get("role", "user"), item.get("content", "")))
-
-    prompt = f"""Based on the following document context:
-{context}
-
-Please answer the question accurately, concisely, and in the SAME language as the question:
-{query}"""
-    messages.append(("user", prompt))
-
-    llm = get_groq_llm(temperature=0.2)
-    response = llm.invoke(messages)
-    return response.content
+    if streaming:
+        def stream_generator():
+            for chunk in llm.stream(messages):
+                if chunk.content:
+                    yield chunk.content
+        return stream_generator()
+    else:
+        return llm.invoke(messages).content
 
 
 def get_formula_response(question: str, vectorstore, history=None, **kwargs) -> str:
