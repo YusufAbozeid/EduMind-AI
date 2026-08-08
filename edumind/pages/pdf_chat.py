@@ -19,6 +19,7 @@ def render_pdf_chat() -> None:
     uploaded = st.file_uploader("Lecture PDF", type=["pdf"])
     st.markdown("</div>", unsafe_allow_html=True)
     
+    # Initialize session states
     if "pdf_chat" not in st.session_state:
         st.session_state.pdf_chat = []
     if "quiz_active" not in st.session_state:
@@ -59,6 +60,7 @@ def render_pdf_chat() -> None:
         render_quiz_interface()
         return
     
+    # Display chat history
     for msg in st.session_state.get("pdf_chat", []):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"], unsafe_allow_html=True)
@@ -72,6 +74,7 @@ def render_pdf_chat() -> None:
             if st.button(prompt, use_container_width=True, key=f"suggest_{prompt}_{len(st.session_state.get('pdf_chat', []))}"):
                 clicked_prompt = prompt
 
+    # Handle Quiz Prompt Trigger
     if clicked_prompt == "Quiz me on this file":
         with st.spinner("Generating quiz questions from your PDF..."):
             questions = generate_quiz_questions(st.session_state.vectorstore, num_questions=5)
@@ -86,6 +89,7 @@ def render_pdf_chat() -> None:
 
     question = st.chat_input("Ask about the lecture...", key="unique_pdf_chat_input") 
     
+    # Map clicked prompts to input question
     if clicked_prompt and clicked_prompt != "Quiz me on this file":
         question = clicked_prompt
         
@@ -98,6 +102,7 @@ def render_pdf_chat() -> None:
         answer = ""
         with st.chat_message("assistant"):
             try:
+                # Specialized formula handling
                 if any(w in question.lower() for w in ["formula", "equation", "symbol"]):
                     response = get_formula_response(
                         question,
@@ -107,6 +112,7 @@ def render_pdf_chat() -> None:
                     st.markdown(response, unsafe_allow_html=True)
                     answer = response
                 else:
+                    # Streamlit native streaming with consolidated RAG
                     stream_gen = get_rag_response(
                         st.session_state.vectorstore,
                         question,
@@ -158,7 +164,7 @@ def render_quiz_interface() -> None:
         with st.expander("📋 Review All Questions"):
             for i, q in enumerate(st.session_state.quiz_questions):
                 user_ans = st.session_state.quiz_user_answers.get(i, "Not answered")
-                is_correct = check_answer(user_ans, q["answer"], question=q["question"])
+                is_correct = check_answer(user_ans, q["answer"])
                 icon = "✅" if is_correct else "❌"
                 st.markdown(f"""
                 **Q{i+1}:** {q['question']}
@@ -227,7 +233,7 @@ def render_quiz_interface() -> None:
     with col1:
         if st.button("✅ Submit Answer", use_container_width=True, type="primary"):
             if user_answer.strip():
-                is_correct = check_answer(user_answer, question_data["answer"], question=question_data["question"])
+                is_correct = check_answer(user_answer, question_data["answer"])
                 st.session_state.quiz_user_answers[current] = user_answer
                 
                 if is_correct:

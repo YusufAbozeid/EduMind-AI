@@ -1,15 +1,16 @@
 import os
-import hashlib
-from typing import Generator, List, Union
+import re
+from typing import Generator
 import streamlit as st
-import fitz  # PyMuPDF
-from pydantic import BaseModel, Field
-
-from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
+
+try:
+    from PyPDF2 import PdfReader
+except Exception:
+    PdfReader = None
 
 SUGGESTED_PROMPTS = [
     "Summarize this file",
@@ -18,91 +19,52 @@ SUGGESTED_PROMPTS = [
 ]
 
 
-# --- Structured Output Schemas ---
-class QuizItem(BaseModel):
-    question: str = Field(description="The quiz question generated strictly from the context.")
-    answer: str = Field(description="The correct concise answer based strictly on the context.")
-
-class QuizSchema(BaseModel):
-    questions: List[QuizItem]
-
-
-def get_groq_llm(streaming: bool = False, temperature: float = 0.2) -> ChatGroq:
-    """Instantiates ChatGroq with explicit key validation and clean fail-fast check."""
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key and hasattr(st, "secrets"):
-        api_key = st.secrets.get("GROQ_API_KEY")
+def get_groq_llm(streaming: bool = False, temperature: float = 0.2):
+    api_key = None
+    if "GROQ_API_KEY" in st.secrets:
+        api_key = st.secrets["GROQ_API_KEY"]
+    else:
+        api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
-        st.error("GROQ_API_KEY is missing! Please configure it in Streamlit Secrets or Environment Variables.")
-        st.stop()
+        raise ValueError("Groq API Key is missing! Please configure GROQ_API_KEY in Streamlit Secrets.")
 
-    groq_model = os.getenv("GROQ_MODEL")
-    if not groq_model and hasattr(st, "secrets"):
-        groq_model = st.secrets.get("GROQ_MODEL", "llama-3.1-8b-instant")
-    elif not groq_model:
-        groq_model = "llama-3.1-8b-instant"
+    groq_model = st.secrets.get("GROQ_MODEL", os.getenv("GROQ_MODEL", "llama-3.1-8b-instant"))
 
-    safe_temp = max(0.0, min(float(temperature), 2.0))
     return ChatGroq(
         groq_api_key=api_key,
         model_name=groq_model,
         streaming=streaming,
-        temperature=safe_temp
+        temperature=temperature
     )
 
 
 @st.cache_resource
 def get_embeddings():
-    """Loads multilingual embedding model supporting Arabic and English seamlessly."""
-    return HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+    return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 
-def _hash_bytes(file_bytes: bytes) -> str:
-    return hashlib.md5(file_bytes).hexdigest()
+@st.cache_resource
+def process_pdf_to_vectorstore(pdf_file):
+    if PdfReader is None:
+        raise ImportError("PyPDF2 is not installed.")
+    pdf_reader = PdfReader(pdf_file)
+    text = ""
+    for page in pdf_reader.pages:
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted
 
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = text_splitter.split_text(text)
 
-@st.cache_resource(hash_funcs={bytes: _hash_bytes})
-def process_pdf_to_vectorstore(file_input: Union[bytes, object]) -> FAISS:
-    """Robust PDF text extraction using PyMuPDF (fitz) with deterministic MD5 byte caching."""
-    if hasattr(file_input, "getvalue"):
-        file_bytes = file_input.getvalue()
-    elif isinstance(file_input, bytes):
-        file_bytes = file_input
-    else:
-        raise ValueError("Invalid file input type. Expected bytes or UploadedFile.")
-
-    if not file_bytes:
-        raise ValueError("Uploaded PDF file is empty.")
-
-    doc = fitz.open(stream=file_bytes, filetype="pdf")
-    documents = []
-
-    for page_num, page in enumerate(doc, start=1):
-        extracted = page.get_text("text")
-        if extracted and extracted.strip():
-            documents.append(
-                Document(
-                    page_content=extracted.strip(),
-                    metadata={"page": page_num}
-                )
-            )
-
-    if not documents:
-        raise ValueError("No extractable text found in PDF. The file might be scanned or image-based.")
-
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=150,
-        separators=["\n\n", "\n", " ", ""]
-    )
-    chunks = text_splitter.split_documents(documents)
     embeddings = get_embeddings()
-    return FAISS.from_documents(chunks, embedding=embeddings)
+    vectorstore = FAISS.from_texts(chunks, embedding=embeddings)
+    return vectorstore
 
 
 def _extract_args(arg1, arg2):
-    """Auto-detects vectorstore and query order safely."""
+    """تعرف تلقائي على ترتيب المتغيرات لمنع خطأ TypeError أو AttributeError"""
     if hasattr(arg1, "similarity_search"):
         return arg1, str(arg2)
     elif hasattr(arg2, "similarity_search"):
@@ -115,21 +77,17 @@ def get_rag_response(
     query: str, 
     history: list = None, 
     streaming: bool = True
-):
-    """Unified RAG pipeline supporting both Streaming and Synchronous responses."""
+) -> Generator[str, None, None] | str:
+    
     if not hasattr(vectorstore, "similarity_search"):
         vectorstore, query = _extract_args(vectorstore, query)
 
-    if not vectorstore:
-        msg = "Error: Vectorstore not initialized. Please re-upload your PDF file."
-        return (chunk for chunk in [msg]) if streaming else msg
-
-    docs = vectorstore.similarity_search(query, k=4)
-    context = "\n\n".join([f"[Page {doc.metadata.get('page', '?')}]: {doc.page_content}" for doc in docs])
+    docs = vectorstore.similarity_search(query, k=3)
+    context = "\n\n".join([doc.page_content for doc in docs])
 
     messages = [
-        ("system", "You are an AI technical assistant. Answer strictly based on the provided PDF context. "
-                   "Always respond in the EXACT same language as the user's question (Arabic or English).")
+        ("system", "You are an AI assistant. Answer strictly based on the provided PDF context. "
+                   "Always respond in the EXACT same language as the user's question.")
     ]
 
     if history:
@@ -153,7 +111,6 @@ def get_rag_response(
 
 
 def get_formula_response(question: str, vectorstore, history=None, **kwargs) -> str:
-    """Extracts mathematical formulas strictly preserving special symbols."""
     if not hasattr(vectorstore, "similarity_search"):
         vectorstore, question = _extract_args(question, vectorstore)
 
@@ -164,69 +121,147 @@ def get_formula_response(question: str, vectorstore, history=None, **kwargs) -> 
     docs = vectorstore.similarity_search(search_query, k=5)
     context = "\n\n".join([doc.page_content for doc in docs])
 
-    if not context or len(context) < 30:
-        return "I couldn't find any formula-related content in the PDF."
+    if not context or len(context) < 50:
+        return "I couldn't find any formula-related content in the PDF. Please make sure the PDF contains mathematical content."
 
-    prompt = f"""You are a precise AI assistant. Extract the formula or equation strictly from the PDF CONTENT below.
-    
-PDF CONTENT:
+    prompt = f"""You are a precise AI assistant. The user is asking about a formula or equation from the PDF.
+
+PDF CONTENT (USE THIS EXACTLY):
 {context}
 
 User Question: {question}
 
-IMPORTANT: Preserve all math symbols (∑, ∫, √, π, θ, α, β) and explain the terms based strictly on the text."""
+IMPORTANT INSTRUCTIONS:
+1. Extract the formula or equation EXACTLY as it appears in the PDF CONTENT above.
+2. If you don't see a formula in the PDF CONTENT above, state: "No formula was found in the PDF content."
+3. PRESERVE ALL special characters, mathematical symbols (like ∑, ∫, √, π, θ, α, β, γ, Δ, etc.)
+4. Use proper mathematical notation.
+5. Explain the formula using ONLY the PDF CONTENT above.
+6. Do NOT use your general knowledge or invent formulas.
 
+Response format:
+- First show the formula as it appears in the PDF
+- Then explain what each part means based on the PDF
+- Finally, explain the significance of the formula from the PDF context
+"""
     messages = [
-        ("system", "You are a strict assistant that ONLY uses provided PDF context."),
+        ("system", "You are a strict assistant that ONLY uses the provided PDF content. Never use external knowledge."),
         ("user", prompt)
     ]
 
     llm = get_groq_llm(temperature=0.1)
-    return llm.invoke(messages).content.strip()
+    response = llm.invoke(messages)
+    return response.content.strip()
 
 
 def generate_quiz_questions(vectorstore, num_questions: int = 5, **kwargs) -> list[dict]:
-    """Generates quiz questions via Pydantic Structured Output to eliminate Regex parsing failures."""
     if not hasattr(vectorstore, "similarity_search"):
         return [{"question": "Error: Invalid vectorstore object.", "answer": "Re-upload PDF."}]
 
-    search_query = "key concepts definitions core principles summary main ideas"
-    docs = vectorstore.similarity_search(search_query, k=5)
-    context = "\n\n".join([doc.page_content for doc in docs])[:4000]
+    search_query = "key concepts definitions main ideas important details core principles"
+    docs = vectorstore.similarity_search(search_query, k=6)
+    context = "\n\n---\n\n".join([doc.page_content for doc in docs])
 
-    llm = get_groq_llm(temperature=0.2)
-    structured_llm = llm.with_structured_output(QuizSchema)
-
-    prompt = f"Generate exactly {num_questions} quiz questions and concise correct answers based ONLY on this context:\n\n{context}"
-
-    try:
-        result: QuizSchema = structured_llm.invoke(prompt)
-        return [q.model_dump() for q in result.questions]
-    except Exception as e:
+    if not context or len(context) < 100:
         return [{
-            "question": "What is the primary focus of this document?",
-            "answer": context[:150] if context else "No content available."
+            "question": "I couldn't find enough content in your PDF to generate questions. Please make sure the PDF contains readable text.",
+            "answer": "Upload a PDF with more content."
         }]
 
+    if len(context) > 5000:
+        context = context[:5000] + "..."
 
-def check_answer(user_answer: str, correct_answer: str, question: str = "") -> bool:
-    """Semantic answer verification via LLM-as-a-Judge."""
-    if user_answer.strip().lower() == correct_answer.strip().lower():
+    prompt = f"""You are creating a quiz based ONLY on the PDF content below.
+
+PDF CONTENT (USE THIS EXACTLY):
+{context}
+
+Generate {num_questions} different quiz questions based ONLY on the content above.
+
+FORMAT YOUR RESPONSE EXACTLY AS:
+Q1: [question 1]
+A1: [answer 1]
+
+Q2: [question 2]
+A2: [answer 2]
+
+...and so on for all {num_questions} questions.
+
+IMPORTANT RULES:
+- ONLY use information from the PDF CONTENT above
+- DO NOT use your general knowledge
+- Questions must be answerable from the PDF content
+- Each question should have ONE correct answer
+- Answers should be directly from the PDF text
+"""
+    messages = [
+        ("system", "You are a strict assistant that ONLY uses the provided PDF content to create quiz questions."),
+        ("user", prompt)
+    ]
+
+    llm = get_groq_llm(temperature=0.2)
+    response_text = llm.invoke(messages).content
+
+    questions = []
+    q_pattern = r'Q(\d+):\s*(.*?)\s*A\1:\s*(.*?)(?=Q\d+:|$)'
+    matches = re.findall(q_pattern, response_text, re.DOTALL)
+
+    if matches:
+        for match in matches:
+            _, question_text, answer_text = match
+            questions.append({
+                "question": question_text.strip(),
+                "answer": answer_text.strip()
+            })
+    else:
+        lines = response_text.strip().split('\n')
+        current_q = None
+        current_a = None
+
+        for line in lines:
+            line = line.strip()
+            if re.match(r'^Q\d+:', line):
+                if current_q and current_a:
+                    questions.append({"question": current_q, "answer": current_a})
+                parts = line.split(':', 1)
+                current_q = parts[1].strip() if len(parts) > 1 else ""
+                current_a = None
+            elif re.match(r'^A\d+:', line) and current_q:
+                parts = line.split(':', 1)
+                current_a = parts[1].strip() if len(parts) > 1 else ""
+                questions.append({"question": current_q, "answer": current_a})
+                current_q = None
+                current_a = None
+
+        if current_q and current_a:
+            questions.append({"question": current_q, "answer": current_a})
+
+    if not questions:
+        questions = [{
+            "question": "What is the main topic of this PDF?",
+            "answer": context[:200] if context else "No content found."
+        }]
+
+    return questions[:num_questions]
+
+
+def check_answer(user_answer: str, correct_answer: str) -> bool:
+    user_clean = user_answer.lower().strip()
+    correct_clean = correct_answer.lower().strip()
+
+    if user_clean == correct_clean:
         return True
 
-    llm = get_groq_llm(temperature=0.0)
-    prompt = f"""Question: {question}
-Expected Answer: {correct_answer}
-User Answer: {user_answer}
+    stopwords = {'the', 'a', 'an', 'of', 'to', 'for', 'with', 'on', 'at', 'from', 'by', 'in', 'as', 'is', 'was', 'are', 'were'}
 
-Evaluate if the User Answer is semantically correct relative to the Expected Answer.
-Respond ONLY with 'CORRECT' or 'INCORRECT' followed by a short explanation.
-Format: [CORRECT/INCORRECT] - Reason
-"""
-    try:
-        res = llm.invoke(prompt).content.strip()
-        return res.startswith("CORRECT")
-    except Exception:
-        u_words = set(user_answer.lower().split())
-        c_words = set(correct_answer.lower().split())
-        return len(u_words.intersection(c_words)) / max(len(c_words), 1) >= 0.5
+    correct_words = [word for word in correct_clean.split() if word not in stopwords]
+    user_words = [word for word in user_clean.split() if word not in stopwords]
+
+    if correct_words:
+        matches = sum(1 for word in correct_words if word in user_words)
+        match_percentage = matches / len(correct_words)
+
+        if match_percentage >= 0.6:
+            return True
+
+    return False
