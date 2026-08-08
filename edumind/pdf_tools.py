@@ -92,12 +92,26 @@ def get_rag_response(
     if not hasattr(vectorstore, "similarity_search"):
         vectorstore, query = _extract_args(vectorstore, query)
 
-    docs = vectorstore.similarity_search(query, k=3)
+    # 1. رفع عدد Chunks في الأسئلة العادية لـ 5 والتلخيص لـ 7 لجمع معلومات أكثر
+    is_summary_request = any(kw in query.lower() for kw in ["summarize", "summary", "overview", "ملخص", "لخص"])
+    k_chunks = 7 if is_summary_request else 5
+
+    docs = vectorstore.similarity_search(query, k=k_chunks)
     context = "\n\n".join([doc.page_content for doc in docs])
 
+    # 2. إجبار الموديل على إعطاء ردود مفصلة وشاملة
     messages = [
-        ("system", "You are an AI assistant. Answer strictly based on the provided PDF context. "
-                   "Always respond in the EXACT same language as the user's question.")
+        ("system", (
+            "You are an expert AI learning assistant for university students.\n"
+            "Answer strictly based on the provided PDF context.\n\n"
+            "FORMATTING & DETAILED EXPLANATION RULES:\n"
+            "1. Respond in the EXACT same language as the user's question (Arabic or English).\n"
+            "2. Provide COMPREHENSIVE, IN-DEPTH, and DETAILED explanations. Avoid short or overly brief answers.\n"
+            "3. Structure answers using **bold key terms**, bullet points, and clean subheadings for high readability.\n"
+            "4. Thoroughly explain mechanisms, components, and examples present in the provided context.\n"
+            "5. DO NOT repeat standard introductory definitions if already explained in previous turns.\n"
+            "6. For summaries, provide an extensive, well-structured breakdown grouped into logical sections."
+        ))
     ]
 
     if history:
@@ -118,7 +132,6 @@ def get_rag_response(
         return stream_generator()
     else:
         return llm.invoke(messages).content
-
 
 def get_formula_response(question: str, vectorstore, history=None, **kwargs) -> str:
     if not hasattr(vectorstore, "similarity_search"):
