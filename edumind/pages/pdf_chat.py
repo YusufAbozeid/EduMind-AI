@@ -1,5 +1,12 @@
 import streamlit as st
-from edumind.pdf_tools import process_pdf_to_vectorstore, pdf_answer, SUGGESTED_PROMPTS,get_formula_response,generate_quiz_questions,check_answer
+from edumind.pdf_tools import (
+    process_pdf_to_vectorstore,
+    get_rag_response,
+    SUGGESTED_PROMPTS,
+    get_formula_response,
+    generate_quiz_questions,
+    check_answer,
+)
 from edumind.storage import add_event
 from edumind.ui import page_header
 
@@ -14,7 +21,6 @@ def render_pdf_chat() -> None:
     
     if "pdf_chat" not in st.session_state:
         st.session_state.pdf_chat = []
-        # Initialize quiz state
     if "quiz_active" not in st.session_state:
         st.session_state.quiz_active = False
     if "quiz_questions" not in st.session_state:
@@ -32,7 +38,8 @@ def render_pdf_chat() -> None:
 
     if uploaded:
         with st.spinner("Processing lecture PDF..."):
-            vectorstore = process_pdf_to_vectorstore(uploaded)
+            file_bytes = uploaded.getvalue() if hasattr(uploaded, "getvalue") else uploaded
+            vectorstore = process_pdf_to_vectorstore(file_bytes)
 
         st.session_state.vectorstore = vectorstore
         st.session_state.pdf_name = uploaded.name
@@ -41,11 +48,11 @@ def render_pdf_chat() -> None:
             st.session_state.username,
             "pdf_uploaded",
             topic=uploaded.name,
-            
         )
-
         st.success(f"Loaded {uploaded.name}")
+
     if "vectorstore" not in st.session_state:
+        st.info("👆 Please upload a lecture PDF above to start chatting.")
         return
 
     if st.session_state.quiz_active:
@@ -64,118 +71,67 @@ def render_pdf_chat() -> None:
         with col:
             if st.button(prompt, use_container_width=True, key=f"suggest_{prompt}_{len(st.session_state.get('pdf_chat', []))}"):
                 clicked_prompt = prompt
-                
-        if clicked_prompt == "Quiz me on this file":
-            with st.spinner("Generating quiz questions from your PDF..."):
-                questions = generate_quiz_questions(st.session_state.vectorstore, num_questions=5)
-                st.session_state.quiz_questions = questions
-                st.session_state.quiz_active = True
-                st.session_state.quiz_current_index = 0
-                st.session_state.quiz_score = 0
-                st.session_state.quiz_answered = False
-                st.session_state.quiz_feedback = ""
-                st.session_state.quiz_user_answers = {}
-            st.rerun()
-        
-    # Handle "Explain the key formula" button
-    if clicked_prompt == "Explain the key formula":
-        # Use the specialized formula response function
-        with st.chat_message("assistant"):
-            placeholder = st.empty()
-            try:
-                # Get formula response (non-streaming to preserve formatting)
-                response = get_formula_response(
-                    "Explain the key formula from this PDF. Please preserve all mathematical symbols and special characters exactly as they appear.",
-                    st.session_state.vectorstore,
-                    history=st.session_state.get("pdf_chat", [])
-                )
-                placeholder.markdown(response, unsafe_allow_html=True)
-                
-                # Add to chat history
-                st.session_state.pdf_chat.append({"role": "assistant", "content": response})
-                
-                # Log the event
-                add_event(
-                    st.session_state.username, 
-                    "pdf_question", 
-                    topic=st.session_state.get("pdf_name"), 
-                    payload={"question": "Explain the key formula"}
-                )
-                
-            except Exception as e:
-                placeholder.error(f"Error generating formula response: {str(e)}")
-        
+
+    if clicked_prompt == "Quiz me on this file":
+        with st.spinner("Generating quiz questions from your PDF..."):
+            questions = generate_quiz_questions(st.session_state.vectorstore, num_questions=5)
+            st.session_state.quiz_questions = questions
+            st.session_state.quiz_active = True
+            st.session_state.quiz_current_index = 0
+            st.session_state.quiz_score = 0
+            st.session_state.quiz_answered = False
+            st.session_state.quiz_feedback = ""
+            st.session_state.quiz_user_answers = {}
         st.rerun()
-           
+
     question = st.chat_input("Ask about the lecture...", key="unique_pdf_chat_input") 
-     
-    if clicked_prompt:
+    
+    if clicked_prompt and clicked_prompt != "Quiz me on this file":
         question = clicked_prompt
         
     if question:
-        # Add user message to history
-        st.session_state.setdefault("pdf_chat", []).append({"role": "user", "content": question})
+        st.session_state.pdf_chat.append({"role": "user", "content": question})
         
-        # Display user message
         with st.chat_message("user"):
             st.markdown(question)
         
-        # Initialize answer variable
         answer = ""
-        
-        # Generate and stream response
         with st.chat_message("assistant"):
-            # Create placeholder for streaming response
-            placeholder = st.empty()
-            full_response = ""
-            
             try:
-                if "formula" in question.lower() or "equation" in question.lower() or "symbol" in question.lower():
-                    # Use specialized formula response
+                if any(w in question.lower() for w in ["formula", "equation", "symbol"]):
                     response = get_formula_response(
                         question,
                         st.session_state.vectorstore,
                         history=st.session_state.get("pdf_chat", [])
                     )
-                    full_response = response
+                    st.markdown(response, unsafe_allow_html=True)
                     answer = response
-                    placeholder.markdown(response, unsafe_allow_html=True)
                 else:
-                # Stream the response - this fills the answer variable
-                    for chunk in pdf_answer(
-                        question,
+                    stream_gen = get_rag_response(
                         st.session_state.vectorstore,
+                        question,
                         history=st.session_state.get("pdf_chat", []),
-                    ):
-                        full_response += chunk
-                        answer = full_response  # Store in answer variable
-                        # Update placeholder with cursor effect
-                        placeholder.markdown(full_response + "▌", unsafe_allow_html=True)
-                    
-                    # Final response without cursor
-                    placeholder.markdown(full_response, unsafe_allow_html=True)
+                        streaming=True
+                    )
+                    answer = st.write_stream(stream_gen)
                     
             except Exception as e:
-                placeholder.error(f"Error generating response: {str(e)}")
+                st.error(f"Error generating response: {str(e)}")
                 answer = f"Error: {str(e)}"
-                full_response = answer
         
-        # Add assistant message to history using the answer variable
         st.session_state.pdf_chat.append({"role": "assistant", "content": answer})
         
-        # Log the event
         add_event(
             st.session_state.username, 
             "pdf_question", 
             topic=st.session_state.get("pdf_name"), 
             payload={"question": question}
         )
-        
-        # Rerun to update the UI
         st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
-    
+
+
 def render_quiz_interface() -> None:
     """Render the quiz interface"""
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
@@ -183,9 +139,7 @@ def render_quiz_interface() -> None:
     st.markdown("Answer the questions based on the PDF content. Type your answer and submit!")
     st.markdown("---")
     
-    # Check if quiz is complete
     if st.session_state.quiz_current_index >= len(st.session_state.quiz_questions):
-        # Quiz complete - show results
         total = len(st.session_state.quiz_questions)
         score = st.session_state.quiz_score
         percentage = (score / total) * 100 if total > 0 else 0
@@ -201,11 +155,10 @@ def render_quiz_interface() -> None:
         </div>
         """, unsafe_allow_html=True)
         
-        # Show all questions and answers
         with st.expander("📋 Review All Questions"):
             for i, q in enumerate(st.session_state.quiz_questions):
                 user_ans = st.session_state.quiz_user_answers.get(i, "Not answered")
-                is_correct = user_ans == q["answer"]  # Simple check
+                is_correct = check_answer(user_ans, q["answer"], question=q["question"])
                 icon = "✅" if is_correct else "❌"
                 st.markdown(f"""
                 **Q{i+1}:** {q['question']}
@@ -240,12 +193,10 @@ def render_quiz_interface() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
         return
     
-    # Display current question
     current = st.session_state.quiz_current_index
     total = len(st.session_state.quiz_questions)
     question_data = st.session_state.quiz_questions[current]
     
-    # Show progress
     st.markdown(f"""
     <div style='display: flex; justify-content: space-between; margin-bottom: 1rem;'>
         <span>Question {current + 1} of {total}</span>
@@ -257,17 +208,13 @@ def render_quiz_interface() -> None:
     """, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Display question
     st.markdown(f"""
     <div style='background: rgba(22, 28, 44, 0.5); padding: 1.5rem; border-radius: 12px; border: 1px solid rgba(108, 92, 231, 0.3);'>
         <p style='font-weight: 600; font-size: 1.1rem;'>{question_data['question']}</p>
     </div>
     """, unsafe_allow_html=True)
-    
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Input for answer
     user_answer = st.text_area(
         "Your answer:",
         value=st.session_state.quiz_user_answers.get(current, ""),
@@ -276,16 +223,11 @@ def render_quiz_interface() -> None:
         height=100
     )
     
-    # Submit answer button
     col1, col2 = st.columns([1, 1])
-    
     with col1:
         if st.button("✅ Submit Answer", use_container_width=True, type="primary"):
             if user_answer.strip():
-                # Check if answer is correct
-                is_correct = check_answer(user_answer, question_data["answer"])
-                
-                # Store user answer
+                is_correct = check_answer(user_answer, question_data["answer"], question=question_data["question"])
                 st.session_state.quiz_user_answers[current] = user_answer
                 
                 if is_correct:
@@ -306,12 +248,10 @@ def render_quiz_interface() -> None:
             st.session_state.quiz_answered = True
             st.rerun()
     
-    # Show feedback if answered
     if st.session_state.quiz_answered and st.session_state.quiz_feedback:
         st.markdown("---")
         st.markdown(st.session_state.quiz_feedback, unsafe_allow_html=True)
         
-        # Next question button
         if st.button("➡️ Next Question", use_container_width=True):
             st.session_state.quiz_current_index += 1
             st.session_state.quiz_answered = False
@@ -319,4 +259,3 @@ def render_quiz_interface() -> None:
             st.rerun()
     
     st.markdown("</div>", unsafe_allow_html=True)
-
