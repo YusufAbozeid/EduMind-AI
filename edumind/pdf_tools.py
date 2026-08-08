@@ -44,16 +44,26 @@ def get_embeddings():
     return HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 
+import io  
+from PyPDF2 import PdfReader
+
 @st.cache_resource
 def process_pdf_to_vectorstore(pdf_file):
     if PdfReader is None:
         raise ImportError("PyPDF2 is not installed.")
+    
+    # تحويل الـ bytes إلى BytesIO Stream إذا تم تمريرها كـ bytes
+    if isinstance(pdf_file, bytes):
+        pdf_file = io.BytesIO(pdf_file)
+    elif hasattr(pdf_file, "getvalue"):
+        pdf_file = io.BytesIO(pdf_file.getvalue())
+
     pdf_reader = PdfReader(pdf_file)
     text = ""
     for page in pdf_reader.pages:
         extracted = page.extract_text()
         if extracted:
-            text += extracted
+            text += extracted + "\n"
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text)
