@@ -54,7 +54,21 @@ def process_pdf_to_vectorstore(pdf_file):
     return vectorstore
 
 
-def get_qwen_response(query, vectorstore, history=None) -> Generator[str, None, None]:
+def _extract_args(arg1, arg2):
+    """تعرف تلقائي على ترتيب المتغيرات لمنع خطأ TypeError أو AttributeError"""
+    if hasattr(arg1, "similarity_search"):
+        return arg1, str(arg2)
+    elif hasattr(arg2, "similarity_search"):
+        return arg2, str(arg1)
+    return None, str(arg1 or arg2)
+
+
+def get_qwen_response(arg1, arg2, history=None, **kwargs) -> Generator[str, None, None]:
+    vectorstore, query = _extract_args(arg1, arg2)
+    if not vectorstore:
+        yield "Error: Vectorstore not initialized. Please re-upload your PDF file."
+        return
+
     docs = vectorstore.similarity_search(query, k=3)
     context = "\n\n".join([doc.page_content for doc in docs])
 
@@ -86,7 +100,11 @@ Instructions:
             yield chunk.content
 
 
-def pdf_answer(vectorstore, query, history=None, **kwargs):
+def pdf_answer(arg1, arg2, history=None, **kwargs):
+    vectorstore, query = _extract_args(arg1, arg2)
+    if not vectorstore:
+        return "Error: Vectorstore not initialized. Please re-upload your PDF file."
+
     docs = vectorstore.similarity_search(query, k=3)
     context = "\n".join([doc.page_content for doc in docs])
 
@@ -105,7 +123,13 @@ def pdf_answer(vectorstore, query, history=None, **kwargs):
     return response.content
 
 
-def get_formula_response(question: str, vectorstore, history=None) -> str:
+def get_formula_response(question: str, vectorstore, history=None, **kwargs) -> str:
+    if not hasattr(vectorstore, "similarity_search"):
+        vectorstore, question = _extract_args(question, vectorstore)
+
+    if not vectorstore:
+        return "Error: Vectorstore not initialized."
+
     search_query = f"formula equation mathematical expression {question}"
     docs = vectorstore.similarity_search(search_query, k=5)
     context = "\n\n".join([doc.page_content for doc in docs])
@@ -143,7 +167,10 @@ Response format:
     return response.content.strip()
 
 
-def generate_quiz_questions(vectorstore, num_questions: int = 5) -> list[dict]:
+def generate_quiz_questions(vectorstore, num_questions: int = 5, **kwargs) -> list[dict]:
+    if not hasattr(vectorstore, "similarity_search"):
+        return [{"question": "Error: Invalid vectorstore object.", "answer": "Re-upload PDF."}]
+
     search_query = "key concepts definitions main ideas important details core principles"
     docs = vectorstore.similarity_search(search_query, k=6)
     context = "\n\n---\n\n".join([doc.page_content for doc in docs])
