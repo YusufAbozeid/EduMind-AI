@@ -86,13 +86,22 @@ Instructions:
             yield chunk.content
 
 
-def pdf_answer(vectorstore, query):
+def pdf_answer(vectorstore, query, history=None, **kwargs):
     docs = vectorstore.similarity_search(query, k=3)
     context = "\n".join([doc.page_content for doc in docs])
 
+    messages = [("system", "You are a helpful assistant that answers questions based on the provided PDF context.")]
+
+    if history:
+        for item in history[-6:]:
+            if isinstance(item, dict):
+                messages.append((item.get("role", "user"), item.get("content", "")))
+
+    prompt = f"بناءً على النص التالي من المستند:\n{context}\n\nأجب على السؤال التالي بدقة وبوضوح:\n{query}"
+    messages.append(("user", prompt))
+
     llm = get_groq_llm(temperature=0.2)
-    prompt = f"بناءً على النص التالي من المستند:\n{context}\n\nأجب على السؤال التالي دقة وبوضوح:\n{query}"
-    response = llm.invoke(prompt)
+    response = llm.invoke(messages)
     return response.content
 
 
