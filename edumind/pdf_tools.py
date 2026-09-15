@@ -52,7 +52,7 @@ def process_pdf_to_vectorstore(pdf_file):
     if PdfReader is None:
         raise ImportError("PyPDF2 is not installed.")
     
-   
+    # تحويل الـ bytes إلى BytesIO Stream إذا تم تمريرها كـ bytes
     if isinstance(pdf_file, bytes):
         pdf_file = io.BytesIO(pdf_file)
     elif hasattr(pdf_file, "getvalue"):
@@ -74,7 +74,7 @@ def process_pdf_to_vectorstore(pdf_file):
 
 
 def _extract_args(arg1, arg2):
-    
+    """تعرف تلقائي على ترتيب المتغيرات لمنع خطأ TypeError أو AttributeError"""
     if hasattr(arg1, "similarity_search"):
         return arg1, str(arg2)
     elif hasattr(arg2, "similarity_search"):
@@ -92,14 +92,14 @@ def get_rag_response(
     if not hasattr(vectorstore, "similarity_search"):
         vectorstore, query = _extract_args(vectorstore, query)
 
-    
+    # 1. رفع عدد Chunks في الأسئلة العادية لـ 5 والتلخيص لـ 7 لجمع معلومات أكثر
     is_summary_request = any(kw in query.lower() for kw in ["summarize", "summary", "overview", "ملخص", "لخص"])
     k_chunks = 7 if is_summary_request else 5
 
     docs = vectorstore.similarity_search(query, k=k_chunks)
     context = "\n\n".join([doc.page_content for doc in docs])
 
-    
+    # 2. إجبار الموديل على إعطاء ردود مفصلة وشاملة
     messages = [
         ("system", (
             "You are an expert AI learning assistant for university students.\n"
