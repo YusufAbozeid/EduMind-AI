@@ -1,0 +1,15 @@
+from fastapi import APIRouter, Request
+from app.schemas.tutor import ChatRequest, ChatResponse
+from app.services.tutor_service import TutorService
+from app.core.security import limiter
+from app.core.config import settings
+
+router = APIRouter(prefix="/chat", tags=["Tutor Chat Engine"])
+
+@router.post("/tutor", response_model=ChatResponse)
+@limiter.limit(settings.RATE_LIMIT_PER_MINUTE)
+def tutor_chat(request: Request, req: ChatRequest):
+    """
+    Production-ready Tutor Chat Endpoint with Rate Limiting & Security Headers
+    """
+    return TutorService.generate_tutor_response(req)
