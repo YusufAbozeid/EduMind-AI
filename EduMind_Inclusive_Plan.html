@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>EduMind Inclusive - Master Architecture Plan</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Inter:wght@400;600;700&display=swap');
+        
+        @page {
+            size: A4;
+            margin: 15mm 15mm 15mm 15mm;
+        }
+
+        body {
+            font-family: 'Cairo', 'Inter', sans-serif;
+            color: #1E293B;
+            background-color: #FFFFFF;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            font-size: 13px;
+        }
+
+        .header-container {
+            background: linear-gradient(135deg, #0F172A 0%, #1E1B4B 50%, #312E81 100%);
+            color: #FFFFFF;
+            padding: 24px 28px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header-container::after {
+            content: "";
+            position: absolute;
+            top: -50px;
+            left: -50px;
+            width: 150px;
+            height: 150px;
+            background: rgba(99, 102, 241, 0.2);
+            border-radius: 50%;
+            filter: blur(40px);
+        }
+
+        .badge-tag {
+            display: inline-block;
+            background: linear-gradient(90deg, #6366F1, #8B5CF6);
+            color: #FFFFFF;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 900;
+            margin: 0 0 8px 0;
+            color: #F8FAFC;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #C7D2FE;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .meta-info {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #A5B4FC;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #1E1B4B;
+            border-right: 4px solid #6366F1;
+            padding-right: 10px;
+            margin-top: 22px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+        }
+
+        .card {
+            background: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+            page-break-inside: avoid;
+        }
+
+        .card-header {
+            font-size: 14px;
+            font-weight: 800;
+            color: #312E81;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-header .tag {
+            background: #EEF2FF;
+            color: #4F46E5;
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+        }
+
+        .highlight-box {
+            background: #F0FDF4;
+            border: 1px solid #BBF7D0;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 16px;
+            color: #166534;
+            font-size: 12px;
+        }
+
+        .addition-box {
+            background: #FAF5FF;
+            border: 1px solid #E9D5FF;
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 16px;
+            color: #6B21A8;
+        }
+
+        ul {
+            margin: 6px 0;
+            padding-right: 20px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 14px;
+            margin-bottom: 20px;
+            font-size: 11px;
+            page-break-inside: avoid;
+        }
+
+        th {
+            background: #1E1B4B;
+            color: #FFFFFF;
+            font-weight: 700;
+            padding: 10px 12px;
+            text-align: right;
+            border: 1px solid #312E81;
+        }
+
+        td {
+            padding: 9px 12px;
+            border: 1px solid #E2E8F0;
+            color: #334155;
+        }
+
+        tr:nth-child(even) {
+            background-color: #F8FAFC;
+        }
+
+        .roadmap-step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            background: #F1F5F9;
+            padding: 10px 14px;
+            border-radius: 8px;
+        }
+
+        .step-num {
+            background: #6366F1;
+            color: white;
+            font-weight: 800;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            margin-left: 12px;
+            flex-shrink: 0;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 12px;
+            border-top: 1px solid #E2E8F0;
+            text-align: center;
+            font-size: 10px;
+            color: #94A3B8;
+        }
+
+        .bold { font-weight: 700; }
+        .purple-text { color: #7C3AED; }
+        .indigo-text { color: #4F46E5; }
+    </style>
+</head>
+<body>
+
+    <div class="header-container">
+        <span class="badge-tag">الخطة المعمارية الشاملة v2.0 | Master Architecture Roadmap</span>
+        <h1>EduMind Inclusive AI</h1>
+        <p class="subtitle">منصة التعليم الذكية التكيفية الشاملة لذوي التنوع العصبي والاحتياجات الخاصة</p>
+        <div class="meta-info">
+            <span>المشروع: EduMind AI Roadmap</span>
+            <span>التركيز: Accessibility, Inclusion & STEM Pedagogy</span>
+            <span>التاريخ: سبتمبر 2026</span>
+        </div>
+    </div>
+
+    <div class="highlight-box">
+        <span class="bold">🎯 الهدف الأسمى للمشروع:</span>
+        تحويل منصة EduMind AI من أداة محادثة واختبارات تقليدية إلى منصة تعليمية شمولية وتكيفية فائقة الذكاء (Inclusive & Adaptive Educational Engine)، تعتمد على التقييم العادل، تقليل الحمل الإدراكي، تمكين ذوي التنوع العصبي (Dyslexia & ADHD)، ودعم الإعاقات البصرية والحركية والهندسة العلمية المتقدمة.
+    </div>
+
+    <div class="section-title">📌 خريطة الأولويات المعمارية الرئيسية (Main Architectural Pillars)</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 10%;">الأولوية</th>
+                <th style="width: 30%;">المحور الرئيسي</th>
+                <th style="width: 60%;">النتيجة الأساسية والأثر التعليمي</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="text-align: center;" class="bold">1</td>
+                <td class="bold indigo-text">التقييم والتعلم التكيفي<br>(Pedagogical Engine)</td>
+                <td>قياس الفهم الحقيقي دون تحيز لغوي، تشخيص المفاهيم الخاطئة دلالياً، وجدولة المراجعات لتثبيت الذاكرة.</td>
+            </tr>
+            <tr>
+                <td style="text-align: center;" class="bold">2</td>
+                <td class="bold indigo-text">الوصولية والتنوع العصبي<br>(Accessibility & Inclusion UI)</td>
+                <td>تقليل الحمل الإدراكي، تخصيص القراءة لعسر القراءة (Dyslexia)، ودعم التركيز الموجه لـ ADHD.</td>
+            </tr>
+            <tr>
+                <td style="text-align: center;" class="bold">3</td>
+                <td class="bold indigo-text">التفاعل الصوتي والشمولي<br>(Voice & Multimodal Engine)</td>
+                <td>تمكين الإجابة والقراءة الصوتية الكاملة Hands-free لدعم ذوي الإعاقات الحركية والبصرية.</td>
+            </tr>
+            <tr>
+                <td style="text-align: center;" class="bold">4</td>
+                <td class="bold indigo-text">استيعاب المحتوى العلمي<br>(Advanced STEM Pipeline)</td>
+                <td>استخراج Markdown نقي للمعادلات والجداول، محول LaTeX للصوت، وبحث هجين BM25 + FAISS.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="section-title">🔹 المرحلة الأولى: إضافات التقييم والتعلم التكيفي (Pedagogical Engine)</div>
+    
+    <div class="card">
+        <div class="card-header">
+            <span>1.1 التقييم ثنائي المسار (Two-Pass Grading)</span>
+            <span class="tag">تقييم عادل</span>
+        </div>
+        <ul>
+            <li><span class="bold">المسار الأول (المنطق والمفهوم):</span> يقيم الـ LLM الخطوات الرياضية والعلمية وتسلسل الاستدلال مع تجاهل الأخطاء اللغوية والإملائية.</li>
+            <li><span class="bold">المسار الثاني (التغذية الراجعة):</span> يكتشف الأخطاء اللغوية والنحوية في صندوق منفصل للتحسين دون خصم أي درجات.</li>
+            <li><span class="bold">الأثر:</span> تقييم أكثر عدلاً وتقليل العبء النفسي على طلاب عسر القراءة/الكتابة ومن يدرسون بلغة ثانية.</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>1.2 سلات المفاهيم الخاطئة (Misconcept Bins)</span>
+            <span class="tag">تشخيص دلالي</span>
+        </div>
+        <ul>
+            <li>تجميع الإجابات الخاطئة تلقائياً تحت تصنيفات مفهومية دلالية (مثل خلط Backpropagation مع Forward Pass).</li>
+            <li>عرض السلات كمناطق مراجعة مكثفة بدلاً من قائمة طويلة عشوائية من الأسئلة.</li>
+            <li>توليد زر ملخص تدريبي مركّز حصرياً على المفاهيم الموجودة داخل السلات لمعالجتها.</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>1.3 خوارزمية التكرار المتباعد (SM-2 Spaced Repetition)</span>
+            <span class="tag">ذاكرة طويلة المدى</span>
+        </div>
+        <ul>
+            <li>ترقية الـ Flashcards من بطاقات ثابته إلى نظام مراجعة ذكي ومجدول بناءً على تقييم الطالب (Hard / Good / Easy).</li>
+            <li>استخدام خوارزمية SM-2 لحساب الموعد الأمثل للمراجعة القادمة وتثبيت المعلومات في الذاكرة.</li>
+        </ul>
+    </div>
+
+    <div class="section-title">🔹 المرحلة الثانية: إمكانية الوصول والتنوع العصبي (Accessibility & Inclusion UI)</div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>2.1 مستويات فاينمان للإجابة (Feynman 3-Tier Layering)</span>
+            <span class="tag">تدرج إدراكي</span>
+        </div>
+        <ul>
+            <li><span class="bold">المستوى المبسط (Intuitive):</span> تشبيه مجازي ونقاط سريعة لتقليل التشتت الإدراكي والذهني.</li>
+            <li><span class="bold">المستوى القياسي (Academic):</span> شرح معتاد متوازن مستخرج من المحاضرة.</li>
+            <li><span class="bold">المستوى المتعمق (Deep Math / Code):</span> إثبات رياضي وتطبيق برمجي كامل.</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>2.2 وضع التركيز الصارم وأدوات عسر القراءة (Zen Mode & Dyslexia Tools)</span>
+            <span class="tag">تركيز بصري</span>
+        </div>
+        <ul>
+            <li><span class="bold">Zen Mode & Line Focus:</span> إخفاء القوائم الجانبية، وإبراز سطر أو فقرة واحدة أثناء القراءة لتقليل التشتت.</li>
+            <li><span class="bold">Dyslexia Fonts & Bionic Reading:</span> تبديل الخط إلى OpenDyslexic وتظليل بدايات الكلمات لدعم حركة العين.</li>
+        </ul>
+    </div>
+
+    <div class="section-title" style="color: #6B21A8;">🌟 الإضافات النوعية المكملة (Enhanced Power-up Additions)</div>
+
+    <div class="addition-box">
+        <div class="bold" style="font-size: 13px; margin-bottom: 8px;">🚀 ميزات مبتكرة مضافة لتعزيز الشمولية والتميز:</div>
+        
+        <div style="margin-bottom: 10px;">
+            <span class="bold purple-text">1. التفاعل والتصحيح الصوتي (Speech-to-Text & Interactive Audio):</span>
+            <br>تمكين الطالب من طرح الأسئلة على الـ PDF وحل الاختبارات شفهياً عبر الصوت Hands-free (دعم ذوي Dysgraphia والإعاقات الحركية)، مع توليد بودكاست تعليمي ميسر (AI Audio Digest) للمحاضرات.
+        </div>
+
+        <div style="margin-bottom: 10px;">
+            <span class="bold purple-text">2. التقطيع التكيفي لـ ADHD (Auto-Chunking & Sensory Breaks):</span>
+            <br>تقسيم المحاضرات والملفات الطويلة تلقائياً إلى دروس مصغرة (Micro-lessons) مدتها 3 دقائق متبوعة بأسئلة سريعة وتذكيرات الاستراحة الحركية لضمان استمرارية التركيز.
+        </div>
+
+        <div style="margin-bottom: 10px;">
+            <span class="bold purple-text">3. التعديل اللغوي والمفاهيمي الميسر (Plain Language & Visual Glossary):</span>
+            <br>زر تحويل المصطلحات المعقدة إلى "عربية/إنجليزية ميسرة" مع قاموس مصطلحات تفاعلي بالصور والأمثلة البسيطة.
+        </div>
+
+        <div>
+            <span class="bold purple-text">4. لوحة تحكم الحمل المعرفي (Inclusive Analytics Dashboard):</span>
+            <br>تتبع نمط التعلم المفضل لدى الطالب (سمعي/بصري)، زمن التركيز، ومؤشر الحمل المعرفي لتقديم توصيات تكيفية مخصصة.
+        </div>
+    </div>
+
+    <div class="section-title">🔹 المرحلة الثالثة: هندسة استيعاب المحتوى العلمي (Advanced STEM Pipeline)</div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>3.1 استخراج المستندات المتقدم والتفاعل الرياضي</span>
+            <span class="tag">STEM Processing</span>
+        </div>
+        <ul>
+            <li><span class="bold">Docling / Marker Pipeline:</span> تحويل الـ PDF إلى Markdown نقي مع الحفاظ التام على المعادلات الرياضية والجداول.</li>
+            <li><span class="bold">LaTeX-to-Speech Parser:</span> تحويل صيغ المعادلات الرياضية إلى وصف صووتي مقروء لقارئات الشاشة لدعم المكفوفين.</li>
+            <li><span class="bold">البحث الهجين (BM25 + FAISS):</span> دمج دقة المصطلحات والمعادلات بـ BM25 مع الدقة الدلالية بـ FAISS.</li>
+        </ul>
+    </div>
+
+    <div class="section-title">📋 جدول الترتيب المتسلسل للتنفيذ (Implementation Steps)</div>
+
+    <div class="roadmap-step">
+        <div class="step-num">1</div>
+        <div><span class="bold">بناء طبقة التقييم ثنائي المسار (Two-Pass Grading):</span> تحديد Schema موحد للدرجات والتغذية الراجعة اللغوية المنفصلة.</div>
+    </div>
+    <div class="roadmap-step">
+        <div class="step-num">2</div>
+        <div><span class="bold">إضافة Misconcept Bins:</span> تصنيف أخطاء الفهم بـ LLM وإخراج JSON لتجميعها في واجهة المراجعة.</div>
+    </div>
+    <div class="roadmap-step">
+        <div class="step-num">3</div>
+        <div><span class="bold">تطبيق SM-2 Flashcards & Feynman Layering:</span> ربط الـ Flashcards بجدولة SM-2 وإضافة زر تبديل عمق الإجابة.</div>
+    </div>
+    <div class="roadmap-step">
+        <div class="step-num">4</div>
+        <div><span class="bold">تنفيذ Accessibility & Dyslexia UI:</span> دمج شريط التباين، خط OpenDyslexic، Bionic Reading، وZen Mode.</div>
+    </div>
+    <div class="roadmap-step">
+        <div class="step-num">5</div>
+        <div><span class="bold">دمج المحرك الصوتي و ADHD Auto-Chunking:</span> إتاحة الإدخال/الإخراج الصوتي وتقسيم المحاضرات لدروس مصغرة.</div>
+    </div>
+    <div class="roadmap-step">
+        <div class="step-num">6</div>
+        <div><span class="bold">ترقية STEM Pipeline والبحث الهجين:</span> دمج Docling/Marker مع LaTeX-to-Speech و BM25 + FAISS.</div>
+    </div>
+
+    <div class="footer">
+        EduMind Inclusive AI Architecture Specification • Generated for Project Graduation & Innovation Roadmap
+    </div>
+
+</body>
+</html>
