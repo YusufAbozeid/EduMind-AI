@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
   Bot, 
@@ -16,6 +16,10 @@ interface ProactiveAgentBannerProps {
 export const ProactiveAgentBanner: React.FC<ProactiveAgentBannerProps> = ({ onOpenRescuePlan }) => {
   const { topics, activeTopicId, language } = useStore();
   const [isDismissed, setIsDismissed] = useState(false);
+
+  useEffect(() => {
+    setIsDismissed(false);
+  }, [activeTopicId]);
 
   const isAr = language === 'ar';
   const activeTopic = topics.find(t => t.id === activeTopicId) || topics[0];

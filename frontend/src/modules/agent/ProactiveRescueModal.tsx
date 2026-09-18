@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
   Bot, 
@@ -40,6 +40,14 @@ export const ProactiveRescueModal: React.FC<ProactiveRescueModalProps> = ({ isOp
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [, setIsPlanCompleted] = useState(false);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCurrentStepIdx(0);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setIsPlanCompleted(false);
+    setActionFeedback(null);
+  }, [activeTopicId, isOpen]);
 
   const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic);
   const currentStep = plan.steps[currentStepIdx] || plan.steps[0];
