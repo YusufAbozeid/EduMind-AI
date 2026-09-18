@@ -7,6 +7,8 @@ import { ReadWriteRenderer } from './ReadWriteRenderer';
 import { KinestheticRenderer } from './KinestheticRenderer';
 import { TutorChat } from '../chat/TutorChat';
 import { TopicSelectorModal } from '../../components/TopicSelectorModal';
+import { ProactiveAgentBanner } from '../agent/ProactiveAgentBanner';
+import { ProactiveRescueModal } from '../agent/ProactiveRescueModal';
 import { ChevronRight, ChevronLeft, RefreshCw, BookOpen } from 'lucide-react';
 
 interface LessonPlayerLayoutProps {
@@ -28,7 +30,9 @@ export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVA
     activeGlossaryTerm,
     setActiveGlossaryTerm,
     language,
-    themeMode
+    themeMode,
+    isRescueModalOpen,
+    setIsRescueModalOpen
   } = useStore();
 
   const isAr = language === 'ar';
@@ -65,6 +69,9 @@ export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVA
         {/* Left/Center Column (70% Content Area = 7/10 cols) */}
         <div className="lg:col-span-7 space-y-6">
           
+          {/* Autonomous Proactive Study Agent Banner */}
+          <ProactiveAgentBanner onOpenRescuePlan={() => setIsRescueModalOpen(true)} />
+
           {/* Top Bar: Course Title & Step Progress Stepper */}
           <div className={`border rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm transition-colors ${
             isDark ? 'bg-card border-slate-800' : 'bg-white border-slate-200 shadow-sm'
@@ -203,6 +210,12 @@ export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVA
       <TopicSelectorModal
         isOpen={isTopicModalOpen}
         onClose={() => setIsTopicModalOpen(false)}
+      />
+
+      {/* Proactive Rescue Plan Modal */}
+      <ProactiveRescueModal
+        isOpen={isRescueModalOpen}
+        onClose={() => setIsRescueModalOpen(false)}
       />
 
     </div>

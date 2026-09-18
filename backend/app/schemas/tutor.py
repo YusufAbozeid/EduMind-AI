@@ -17,3 +17,16 @@ class ChatResponse(BaseModel):
     modality: str
     language: str
     status: str = "success"
+
+class AgentDiagnosisRequest(BaseModel):
+    username: Optional[str] = Field("يوسف أبوزيد", description="Student name")
+    topic: Optional[str] = Field(None, description="Active topic title")
+    weak_concept: Optional[str] = Field(None, description="Target weakness concept if already known")
+    language: Optional[str] = Field("ar", description="Language ar/en")
+
+class AgentDiagnosisResponse(BaseModel):
+    status: str = "success"
+    concept_name: str
+    mastery_score: int
+    proactive_message: str
+    steps: list[dict]

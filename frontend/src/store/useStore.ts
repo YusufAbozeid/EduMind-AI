@@ -149,6 +149,10 @@ interface AppState {
   speakText: (text: string, rate?: number) => void;
   stopSpeech: () => void;
   isSpeaking: boolean;
+
+  // Autonomous Proactive Study Agent
+  isRescueModalOpen: boolean;
+  setIsRescueModalOpen: (open: boolean) => void;
 }
 
 export const defaultTopics: CourseTopic[] = [
@@ -731,5 +735,9 @@ export const useStore = create<AppState>((set, get) => ({
       window.speechSynthesis.cancel();
       set({ isSpeaking: false });
     }
-  }
+  },
+
+  // Autonomous Proactive Study Agent
+  isRescueModalOpen: false,
+  setIsRescueModalOpen: (open: boolean) => set({ isRescueModalOpen: open })
 }));

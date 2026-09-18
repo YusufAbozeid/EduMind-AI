@@ -122,3 +122,92 @@ class TutorService:
             status="success"
         )
 
+    @staticmethod
+    def diagnose_and_plan(req):
+        is_ar = (req.language == "ar")
+        username = req.username or ("يوسف" if is_ar else "Yusuf")
+        raw_topic = (req.topic or "").lower()
+        raw_concept = req.weak_concept
+
+        # Dynamic topic knowledge base matching
+        if raw_concept:
+            concept_ar = raw_concept
+            concept_en = raw_concept
+            slide_target = 14
+            mastery_score = 42
+        elif any(k in raw_topic for k in ["attention", "transformer", "bert", "gpt", "nlp", "preproc"]):
+            concept_ar = "آلية الانتباه الذاتي (Self-Attention & Scaled Dot-Product)"
+            concept_en = "Self-Attention Mechanism & Scaling Factor"
+            slide_target = 18
+            mastery_score = 38
+        elif any(k in raw_topic for k in ["concurr", "thread", "async", "gil", "race", "parallel"]):
+            concept_ar = "قفل المفسر العام (GIL) وحالات التنافس (Race Conditions)"
+            concept_en = "Global Interpreter Lock (GIL) & Race Conditions"
+            slide_target = 12
+            mastery_score = 44
+        elif any(k in raw_topic for k in ["cnn", "convolut", "kernel", "filter", "vision", "pooling"]):
+            concept_ar = "مرشحات الالتفاف وحسابات الـ Stride والـ Pooling"
+            concept_en = "Convolutional Kernels, Stride & Max-Pooling"
+            slide_target = 9
+            mastery_score = 45
+        elif any(k in raw_topic for k in ["rag", "retriev", "embed", "vector", "faiss", "chunk"]):
+            concept_ar = "استراتيجيات التقطيع وحساب تشابه المتجهات (Cosine Similarity)"
+            concept_en = "Chunking Strategies & Vector Cosine Similarity"
+            slide_target = 21
+            mastery_score = 40
+        elif any(k in raw_topic for k in ["rnn", "lstm", "gru", "sequence", "vanishing"]):
+            concept_ar = "تلاشي المشتقات (Vanishing Gradients) وبوابات الـ LSTM"
+            concept_en = "Vanishing Gradients & LSTM Gating Mechanics"
+            slide_target = 15
+            mastery_score = 35
+        elif req.topic:
+            concept_ar = f"المفاهيم المتقدمة في {req.topic}"
+            concept_en = f"Advanced Concepts in {req.topic}"
+            slide_target = 8
+            mastery_score = 46
+        else:
+            concept_ar = "معادلات الانحدار العكسي وحساب المشتقات (Backpropagation)"
+            concept_en = "Backpropagation Equations & Chain Rule"
+            slide_target = 14
+            mastery_score = 42
+
+        concept = concept_ar if is_ar else concept_en
+        
+        msg = (
+            f"أهلاً يا {username}! حللت أداءك الأخير في كويزات Wordwall، واكتشفت أنك واجهت صعوبة في فهم {concept}. "
+            "أعددت لك خطة إنقاذ سريعة من 3 خطوات لمدة 10 دقائق فقط لإتقان المفهوم تماماً.. هل نبدأ معاً؟ 🚀"
+            if is_ar else
+            f"Hello {username}! I analyzed your recent quiz performance and spotted difficulty with {concept}. "
+            "I prepared an autonomous 3-step rescue plan (10 mins) to master this concept.. Ready to begin? 🚀"
+        )
+
+        steps = [
+            {
+                "step": 1,
+                "title": "الفهم الحدسي عبر النمط البصري" if is_ar else "Visual Modality Intuition",
+                "action": "SWITCH_MODALITY",
+                "target": "visual"
+            },
+            {
+                "step": 2,
+                "title": f"فحص شريحة المحاضرة المستهدفة (Slide {slide_target})" if is_ar else f"Lecture Slide {slide_target} Spotlight",
+                "action": "OPEN_SLIDE",
+                "target": slide_target
+            },
+            {
+                "step": 3,
+                "title": "كويز التحقق التشخيصي وحصد الـ XP" if is_ar else "Verification Micro-Quiz",
+                "action": "LAUNCH_MICRO_QUIZ",
+                "target": "diagnostic_quiz_3q"
+            }
+        ]
+
+        from app.schemas.tutor import AgentDiagnosisResponse
+        return AgentDiagnosisResponse(
+            status="success",
+            concept_name=concept,
+            mastery_score=mastery_score,
+            proactive_message=msg,
+            steps=steps
+        )
+

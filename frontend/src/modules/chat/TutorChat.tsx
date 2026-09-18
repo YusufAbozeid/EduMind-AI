@@ -12,8 +12,10 @@ import {
   Mic,
   MicOff,
   Sparkles,
-  Hand
+  Hand,
+  Zap
 } from 'lucide-react';
+import { ProactiveAgentService } from '../../services/proactiveAgentService';
 
 export const TutorChat: React.FC = () => {
   const {
@@ -28,11 +30,16 @@ export const TutorChat: React.FC = () => {
     egyptianDialect,
     language,
     themeMode,
-    setSignLanguageTerm
+    setSignLanguageTerm,
+    setIsRescueModalOpen,
+    topics,
+    activeTopicId,
   } = useStore();
 
   const isAr = language === 'ar';
   const isDark = themeMode === 'dark';
+  const activeTopic = topics?.find((t) => t.id === activeTopicId) || (topics && topics[0]);
+  const activePlan = activeTopic ? ProactiveAgentService.getRescuePlanForTopic(activeTopic) : null;
 
   const [input, setInput] = useState('');
   const [proactiveHint, setProactiveHint] = useState<string | null>(null);
@@ -143,6 +150,26 @@ export const TutorChat: React.FC = () => {
           </span>
         )}
       </div>
+
+      {/* Proactive Agent Quick Action Bar */}
+      {activePlan && (
+        <div className="px-3.5 py-2 bg-gradient-to-r from-purple-950/80 via-indigo-950/70 to-slate-900 border-b border-purple-500/30 flex items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
+            <span className="text-[10px] font-extrabold text-purple-200 truncate">
+              {isAr 
+                ? `🚨 خطة إنقاذ: ${activePlan.conceptNameAr} (3 خطوات)` 
+                : `🚨 3-Step Rescue: ${activePlan.conceptNameEn}`}
+            </span>
+          </div>
+          <button
+            onClick={() => setIsRescueModalOpen(true)}
+            className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-xs shrink-0 transition hover:scale-105 active:scale-95"
+          >
+            {isAr ? 'ابدأ الآن 🚀' : 'Start 🚀'}
+          </button>
+        </div>
+      )}
 
       {/* Messages List Container */}
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
