@@ -153,6 +153,8 @@ interface AppState {
   // Autonomous Proactive Study Agent
   isRescueModalOpen: boolean;
   setIsRescueModalOpen: (open: boolean) => void;
+  topicMastery: Record<string, number>;
+  setTopicMastery: (topicId: string, score: number) => void;
 }
 
 export const defaultTopics: CourseTopic[] = [
@@ -739,5 +741,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Autonomous Proactive Study Agent
   isRescueModalOpen: false,
-  setIsRescueModalOpen: (open: boolean) => set({ isRescueModalOpen: open })
+  setIsRescueModalOpen: (open: boolean) => set({ isRescueModalOpen: open }),
+  topicMastery: {},
+  setTopicMastery: (topicId: string, score: number) => set((state) => ({
+    topicMastery: { ...state.topicMastery, [topicId]: score }
+  }))
 }));

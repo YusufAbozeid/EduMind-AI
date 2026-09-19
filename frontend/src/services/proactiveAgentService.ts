@@ -57,6 +57,12 @@ export interface RescuePlan {
   conceptNameAr: string;
   conceptNameEn: string;
   masteryScore: number;
+  isNewTopic?: boolean;
+  badgeAr?: string;
+  badgeEn?: string;
+  badgeType?: 'new' | 'weakness' | 'mastered';
+  ctaLabelAr?: string;
+  ctaLabelEn?: string;
   detectedWeaknessReasonAr: string;
   detectedWeaknessReasonEn: string;
   proactiveMessageAr: string;
@@ -942,9 +948,11 @@ export class ProactiveAgentService {
   /**
    * Retrieves or computes the active rescue plan dynamically for ANY topic.
    * Checks dedicated topic ID registry first, then falls back to dynamic synthesizer.
-   * GUARANTEES that EVERY topic has a completely distinct and tailored diagnosis.
+   * ACCEPTS actual userMastery percentage (if any). If user never touched this topic,
+   * it intelligently offers a preview tour (0% complete) rather than claiming a false weakness!
    */
-  static getRescuePlanForTopic(topic: CourseTopic | undefined): RescuePlan {
+  static getRescuePlanForTopic(topic: CourseTopic | undefined, userMastery?: number): RescuePlan {
+    let basePlan: any;
     if (!topic) {
       const fallbackTopic: CourseTopic = {
         id: 'su26_session1',
@@ -957,37 +965,82 @@ export class ProactiveAgentService {
         icon: 'BookOpen',
         badge: 'TR333 - G2'
       };
-      return DEDICATED_PLANS.su26_session1(fallbackTopic);
+      basePlan = DEDICATED_PLANS.su26_session1(fallbackTopic);
+    } else if (DEDICATED_PLANS[topic.id]) {
+      basePlan = DEDICATED_PLANS[topic.id](topic);
+    } else {
+      const lower = `${topic.id} ${topic.titleAr} ${topic.titleEn}`.toLowerCase();
+      if (lower.includes('lora') || lower.includes('qlora') || lower.includes('streamlit') || topic.id.includes('session5')) {
+        basePlan = DEDICATED_PLANS.su26_session5(topic);
+      } else if (lower.includes('concurrency') || lower.includes('gil') || lower.includes('sync') || topic.id.includes('session2')) {
+        basePlan = DEDICATED_PLANS.su26_session2(topic);
+      } else if (lower.includes('lstm') || lower.includes('rnn') || lower.includes('gru') || lower.includes('polarity') || topic.id.includes('session3')) {
+        basePlan = DEDICATED_PLANS.su26_session3(topic);
+      } else if (lower.includes('rag') || lower.includes('vector') || lower.includes('faiss') || lower.includes('weaviate') || topic.id.includes('session8')) {
+        basePlan = DEDICATED_PLANS.su26_session8(topic);
+      } else if (lower.includes('project') || lower.includes('capstone') || lower.includes('مشروع') || topic.id.includes('session7')) {
+        basePlan = DEDICATED_PLANS.su26_session7(topic);
+      } else if (lower.includes('attention') || lower.includes('preprocessing') || lower.includes('bpe') || topic.id.includes('session1')) {
+        basePlan = DEDICATED_PLANS.su26_session1(topic);
+      } else {
+        basePlan = buildDynamicTopicPlan(topic);
+      }
     }
 
-    // 1. Check exact topic ID in dedicated plans
-    if (DEDICATED_PLANS[topic.id]) {
-      return DEDICATED_PLANS[topic.id](topic);
+    const currentTopicTitleAr = topic ? topic.titleAr : basePlan.conceptNameAr;
+    const currentTopicTitleEn = topic ? topic.titleEn : basePlan.conceptNameEn;
+
+    // 1. BRAND NEW TOPIC (User has not played games or taken quizzes in this topic yet)
+    if (userMastery === undefined) {
+      return {
+        ...basePlan,
+        isNewTopic: true,
+        masteryScore: 0,
+        badgeType: 'new',
+        badgeAr: '✨ موضوع جديد - استكشاف تمهيدي (0% مكتمل)',
+        badgeEn: '✨ New Topic - Preview Tour (0% Complete)',
+        ctaLabelAr: 'ابدأ الاستكشاف التمهيدي (10 دقائق) 🚀',
+        ctaLabelEn: 'Start Preview Tour (10 mins) 🚀',
+        detectedWeaknessReasonAr: `أنت تفتح موضوع (${currentTopicTitleAr}) للمرة الأولى ولم تسجل أي إجابات فيه بعد! جهز لك الوكيل جولة تمهيدية لاستكشاف أهم المفاهيم والشريحة التفاعلية قبل أن تبدأ المحاضرة.`,
+        detectedWeaknessReasonEn: `You are opening (${currentTopicTitleEn}) for the first time with zero quiz attempts so far. The agent generated a preview tour before you begin.`,
+        proactiveMessageAr: `أهلاً يا يوسف! 👋 لاحظت أنك تبدأ دراسة موضوع (${currentTopicTitleAr}) للمرة الأولى! جهزت لك جولة تمهيدية سريعة من 3 خطوات لمدة 10 دقائق لتأسيس المفاهيم المفتاحية والشريحة الأساسية قبل البدء.. هل نبدأ الاستكشاف؟ 🚀`,
+        proactiveMessageEn: `Hey Yusuf! 👋 Noticed you are starting (${currentTopicTitleEn}) for the first time! I prepared a 3-step preview tour (10 mins) to explore key concepts and lecture slides before diving in.. Shall we explore? 🚀`
+      };
     }
 
-    // 2. Check title keywords to route to appropriate dedicated plan if topic was scraped or imported
-    const lower = `${topic.id} ${topic.titleAr} ${topic.titleEn}`.toLowerCase();
-    if (lower.includes('lora') || lower.includes('qlora') || lower.includes('streamlit') || topic.id.includes('session5')) {
-      return DEDICATED_PLANS.su26_session5(topic);
-    }
-    if (lower.includes('concurrency') || lower.includes('gil') || lower.includes('sync') || topic.id.includes('session2')) {
-      return DEDICATED_PLANS.su26_session2(topic);
-    }
-    if (lower.includes('lstm') || lower.includes('rnn') || lower.includes('gru') || lower.includes('polarity') || topic.id.includes('session3')) {
-      return DEDICATED_PLANS.su26_session3(topic);
-    }
-    if (lower.includes('rag') || lower.includes('vector') || lower.includes('faiss') || lower.includes('weaviate') || topic.id.includes('session8')) {
-      return DEDICATED_PLANS.su26_session8(topic);
-    }
-    if (lower.includes('project') || lower.includes('capstone') || lower.includes('مشروع') || topic.id.includes('session7')) {
-      return DEDICATED_PLANS.su26_session7(topic);
-    }
-    if (lower.includes('attention') || lower.includes('preprocessing') || lower.includes('bpe') || topic.id.includes('session1')) {
-      return DEDICATED_PLANS.su26_session1(topic);
+    // 2. REAL WEAKNESS DETECTED (< 70% based on user's actual attempts)
+    if (userMastery < 70) {
+      return {
+        ...basePlan,
+        isNewTopic: false,
+        masteryScore: userMastery,
+        badgeType: 'weakness',
+        badgeAr: `ثغرة تم رصدها من كويزاتك (${userMastery}% إتقان)`,
+        badgeEn: `Quiz Knowledge Gap Detected (${userMastery}%)`,
+        ctaLabelAr: 'ابدأ خطة الإنقاذ (10 دقائق) 🚀',
+        ctaLabelEn: 'Start 3-Step Rescue Plan 🚀',
+        detectedWeaknessReasonAr: `بناءً على إجاباتك السابقة في اختبارات وألعاب هذا الموضوع، واجهت صعوبة في فهم (${basePlan.conceptNameAr}) بنسبة إتقان فعلية بلغت ${userMastery}%.`,
+        detectedWeaknessReasonEn: `Based on your previous quiz performance on this topic, difficulty was spotted in (${basePlan.conceptNameEn}) with an actual mastery of ${userMastery}%.`,
+        proactiveMessageAr: `أهلاً يا يوسف! 👋 حللت إجاباتك الأخيرة في كويزات موضوع (${currentTopicTitleAr}) ولاحظت أن نسبة إتقانك حالياً ${userMastery}%، وتواجه صعوبة في فهم (${basePlan.conceptNameAr}). جهزت لك خطة إنقاذ من 3 خطوات لمدة 10 دقائق لرفع إتقانك تماماً.. هل نبدأ؟ 🚀`,
+        proactiveMessageEn: `Hey Yusuf! 👋 I analyzed your recent quiz performance in (${currentTopicTitleEn}) and noticed your mastery is ${userMastery}%, with difficulty in (${basePlan.conceptNameEn}). I synthesized a 3-step rescue plan (10 mins).. Ready? 🚀`
+      };
     }
 
-    // 3. For any other topic, school book, Moodle topic, or uploaded PDF -> build fully dynamic topic plan!
-    return buildDynamicTopicPlan(topic);
+    // 3. MASTERED TOPIC (>= 70%)
+    return {
+      ...basePlan,
+      isNewTopic: false,
+      masteryScore: userMastery,
+      badgeType: 'mastered',
+      badgeAr: `🌟 مستوى متفوق (${userMastery}% إتقان)`,
+      badgeEn: `🌟 Mastered Level (${userMastery}%)`,
+      ctaLabelAr: 'بدء التحدي المتقدم (+60 XP) 🚀',
+      ctaLabelEn: 'Start Advanced Challenge 🚀',
+      detectedWeaknessReasonAr: `أداؤك ممتاز في هذا الموضوع بنسبة استيعاب ${userMastery}%! جهز لك الوكيل تحدياً تعزيزياً لترسيخ الفهم وحصد نقاط XP إضافية.`,
+      detectedWeaknessReasonEn: `Superb mastery at ${userMastery}%! The agent prepared an enrichment challenge to lock in skills and award extra XP.`,
+      proactiveMessageAr: `أهلاً يا يوسف! 👋 ما شاء الله! مستواك ممتاز في موضوع (${currentTopicTitleAr}) بنسبة إتقان ${userMastery}%! جهزت لك تحدياً تشخيصياً متقدماً لتثبيت إتقانك وحصد +60 XP إضافية.. هل تقبل التحدي؟ 🚀`,
+      proactiveMessageEn: `Hey Yusuf! 👋 Outstanding performance in (${currentTopicTitleEn}) with ${userMastery}% mastery! I prepared an advanced mastery challenge to claim +60 XP.. Accept the challenge? 🚀`
+    };
   }
 
   /**

@@ -14,7 +14,7 @@ interface ProactiveAgentBannerProps {
 }
 
 export const ProactiveAgentBanner: React.FC<ProactiveAgentBannerProps> = ({ onOpenRescuePlan }) => {
-  const { topics, activeTopicId, language } = useStore();
+  const { topics, activeTopicId, language, topicMastery } = useStore();
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
@@ -23,7 +23,8 @@ export const ProactiveAgentBanner: React.FC<ProactiveAgentBannerProps> = ({ onOp
 
   const isAr = language === 'ar';
   const activeTopic = topics.find(t => t.id === activeTopicId) || topics[0];
-  const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic);
+  const currentMastery = topicMastery ? topicMastery[activeTopic.id] : undefined;
+  const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic, currentMastery);
 
   if (isDismissed) return null;
 
@@ -52,9 +53,19 @@ export const ProactiveAgentBanner: React.FC<ProactiveAgentBannerProps> = ({ onOp
                 <Sparkles className="w-3 h-3 text-purple-300" />
                 <span>{isAr ? 'مبادرة الوكيل الذكي المستقل' : 'Autonomous Study Agent'}</span>
               </span>
-              <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                <TrendingDown className="w-3 h-3 text-rose-400" />
-                <span>{isAr ? `ثغرة تم رصدها (${plan.masteryScore}% إتقان)` : `Weakness Detected (${plan.masteryScore}%)`}</span>
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                plan.badgeType === 'new'
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  : plan.badgeType === 'mastered'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+              }`}>
+                {plan.badgeType === 'weakness' ? (
+                  <TrendingDown className="w-3 h-3 text-rose-400" />
+                ) : (
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                )}
+                <span>{isAr ? plan.badgeAr : plan.badgeEn}</span>
               </span>
             </div>
 
@@ -71,7 +82,7 @@ export const ProactiveAgentBanner: React.FC<ProactiveAgentBannerProps> = ({ onOp
             className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-extrabold text-xs shadow-md shadow-purple-600/30 flex items-center justify-center gap-1.5 transition hover:scale-105 active:scale-95 whitespace-nowrap"
           >
             <Zap className="w-4 h-4 text-amber-300 animate-bounce" />
-            <span>{isAr ? 'ابدأ خطة الإنقاذ (10 دقائق) 🚀' : 'Start 3-Step Rescue Plan 🚀'}</span>
+            <span>{isAr ? plan.ctaLabelAr : plan.ctaLabelEn}</span>
           </button>
 
           <button

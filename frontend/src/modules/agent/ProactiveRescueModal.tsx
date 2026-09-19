@@ -28,7 +28,9 @@ export const ProactiveRescueModal: React.FC<ProactiveRescueModalProps> = ({ isOp
     setActiveModality, 
     addXP, 
     language, 
-    themeMode 
+    themeMode,
+    topicMastery,
+    setTopicMastery
   } = useStore();
 
   const isAr = language === 'ar';
@@ -49,7 +51,8 @@ export const ProactiveRescueModal: React.FC<ProactiveRescueModalProps> = ({ isOp
     setActionFeedback(null);
   }, [activeTopicId, isOpen]);
 
-  const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic);
+  const currentMastery = topicMastery ? topicMastery[activeTopic.id] : undefined;
+  const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic, currentMastery);
   const currentStep = plan.steps[currentStepIdx] || plan.steps[0];
 
   if (!isOpen) return null;
@@ -95,6 +98,16 @@ export const ProactiveRescueModal: React.FC<ProactiveRescueModalProps> = ({ isOp
     setQuizSubmitted(true);
     setIsPlanCompleted(true);
     addXP(plan.rewardXP);
+
+    const questions = currentStep.action.payload.quizQuestions || [];
+    let correctCount = 0;
+    questions.forEach((q, idx) => {
+      if (quizAnswers[idx] === q.correct) {
+        correctCount++;
+      }
+    });
+    const computedScore = Math.round((correctCount / Math.max(1, questions.length)) * 100);
+    setTopicMastery(activeTopic.id, computedScore);
   };
 
   return (
@@ -327,10 +340,12 @@ export const ProactiveRescueModal: React.FC<ProactiveRescueModalProps> = ({ isOp
                 ) : (
                   <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-1.5 animate-bounce-short">
                     <span className="text-xs font-extrabold text-emerald-300 block">
-                      🎉 {isAr ? `مبروك! تم إتقان مفهوم (${plan.conceptNameAr}) بنجاح!` : `Congratulations! (${plan.conceptNameEn}) Mastered!`}
+                      🎉 {isAr ? `أحسنت! أتممت اختبار (${plan.conceptNameAr}) بنجاح!` : `Great job! (${plan.conceptNameEn}) challenge completed!`}
                     </span>
                     <span className="text-[11px] text-slate-300 block">
-                      {isAr ? `حصلت على +${plan.rewardXP} XP وتم تحديث نسبة استيعابك للموضوع إلى 95%!` : `Awarded +${plan.rewardXP} XP! Mastery updated to 95%!`}
+                      {isAr 
+                        ? `حصلت على ${Object.values(quizAnswers).filter((ans, idx) => ans === currentStep.action.payload.quizQuestions?.[idx]?.correct).length} من ${currentStep.action.payload.quizQuestions?.length} إجابات صحيحة (نسبة الإتقان المحسوبة: ${topicMastery?.[activeTopic.id] ?? 100}%) وحصدت +${plan.rewardXP} XP!` 
+                        : `Scored ${Object.values(quizAnswers).filter((ans, idx) => ans === currentStep.action.payload.quizQuestions?.[idx]?.correct).length}/${currentStep.action.payload.quizQuestions?.length} correct (${topicMastery?.[activeTopic.id] ?? 100}% mastery)! Awarded +${plan.rewardXP} XP!`}
                     </span>
                   </div>
                 )}

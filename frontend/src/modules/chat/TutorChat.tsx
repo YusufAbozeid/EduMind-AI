@@ -34,12 +34,14 @@ export const TutorChat: React.FC = () => {
     setIsRescueModalOpen,
     topics,
     activeTopicId,
+    topicMastery,
   } = useStore();
 
   const isAr = language === 'ar';
   const isDark = themeMode === 'dark';
   const activeTopic = topics?.find((t) => t.id === activeTopicId) || (topics && topics[0]);
-  const activePlan = activeTopic ? ProactiveAgentService.getRescuePlanForTopic(activeTopic) : null;
+  const currentMastery = (topicMastery && activeTopic) ? topicMastery[activeTopic.id] : undefined;
+  const activePlan = activeTopic ? ProactiveAgentService.getRescuePlanForTopic(activeTopic, currentMastery) : null;
 
   const [input, setInput] = useState('');
   const [proactiveHint, setProactiveHint] = useState<string | null>(null);
@@ -158,15 +160,15 @@ export const TutorChat: React.FC = () => {
             <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
             <span className="text-[10px] font-extrabold text-purple-200 truncate">
               {isAr 
-                ? `🚨 خطة إنقاذ: ${activePlan.conceptNameAr} (3 خطوات)` 
-                : `🚨 3-Step Rescue: ${activePlan.conceptNameEn}`}
+                ? (activePlan.isNewTopic ? `✨ استكشاف: ${activePlan.conceptNameAr}` : `🚨 خطة إنقاذ: ${activePlan.conceptNameAr}`) 
+                : (activePlan.isNewTopic ? `✨ Preview: ${activePlan.conceptNameEn}` : `🚨 Rescue: ${activePlan.conceptNameEn}`)}
             </span>
           </div>
           <button
             onClick={() => setIsRescueModalOpen(true)}
             className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-xs shrink-0 transition hover:scale-105 active:scale-95"
           >
-            {isAr ? 'ابدأ الآن 🚀' : 'Start 🚀'}
+            {isAr ? (activePlan.isNewTopic ? 'استكشاف 🚀' : 'ابدأ الآن 🚀') : (activePlan.isNewTopic ? 'Preview 🚀' : 'Start 🚀')}
           </button>
         </div>
       )}
