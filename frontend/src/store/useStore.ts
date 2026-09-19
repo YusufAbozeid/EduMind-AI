@@ -291,11 +291,11 @@ export const useStore = create<AppState>((set, get) => ({
 
     const currentTopic = get().topics.find(t => t.id === get().activeTopicId) || get().topics[0];
     const isAr = lang === 'ar';
-    const topicTitle = currentTopic ? (isAr ? currentTopic.titleAr : currentTopic.titleEn) : '';
+    const topicTitle = currentTopic ? (isAr ? currentTopic.titleAr : currentTopic.titleEn) : (isAr ? 'رحلتك التعليمية' : 'your learning journey');
 
     const initialText = lang === 'en'
-      ? `Welcome to SHAGHOOF AI! I am your AI Tutor. How can I help you explore ${topicTitle} today?`
-      : `أهلاً بك في منصة SHAGHOOF AI! أنا مساعدك التعليمي. كيف تحب أن نبدأ دراسة ${topicTitle} اليوم؟ 🚀`;
+      ? (currentTopic ? `Welcome to SHAGHOOF AI! I am your AI Tutor. How can I help you explore ${topicTitle} today?` : `Welcome to SHAGHOOF AI! 🚀 I am your AI Tutor. Your account is fresh and ready. Select a textbook or upload a PDF to begin!`)
+      : (currentTopic ? `أهلاً بك في منصة SHAGHOOF AI! أنا مساعدك التعليمي. كيف تحب أن نبدأ دراسة ${topicTitle} اليوم؟ 🚀` : `أهلاً بك في منصة SHAGHOOF AI! 🚀 أنا رفيقك التعليمي الذكي. حسابك جديد ونظيف، اختر مادتك من مجمع المناهج أو ارفع ملف المحاضرة لنبدأ رحلتك التعليمية المخصصة!`);
 
     set({
       messages: [
@@ -310,9 +310,9 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
 
-  // Topics
-  topics: defaultTopics,
-  activeTopicId: defaultTopics[0].id,
+  // Topics (Fresh Account - Empty Curriculum on Start)
+  topics: [],
+  activeTopicId: '',
   setActiveTopicId: (id: string) => {
     const targetTopic = get().topics.find(t => t.id === id);
     set({ 
@@ -345,13 +345,27 @@ export const useStore = create<AppState>((set, get) => ({
     set((state) => {
       const exists = state.topics.some(t => t.id === newTopic.id);
       if (exists) return state;
-      return { topics: [newTopic, ...state.topics] };
+      const nextTopics = [newTopic, ...state.topics];
+      return { 
+        topics: nextTopics,
+        activeTopicId: state.activeTopicId || newTopic.id,
+        currentStep: 1,
+        totalSteps: newTopic.totalSteps || 5
+      };
     });
   },
   addTopics: (newTopics: CourseTopic[]) => {
     set((state) => {
       const filtered = newTopics.filter(nt => !state.topics.some(t => t.id === nt.id));
-      return { topics: [...filtered, ...state.topics] };
+      const nextTopics = [...filtered, ...state.topics];
+      const nextActiveId = state.activeTopicId || (nextTopics[0] ? nextTopics[0].id : '');
+      const currentActiveTopic = nextTopics.find(t => t.id === nextActiveId);
+      return { 
+        topics: nextTopics,
+        activeTopicId: nextActiveId,
+        currentStep: 1,
+        totalSteps: currentActiveTopic ? currentActiveTopic.totalSteps : 5
+      };
     });
   },
 
@@ -398,7 +412,7 @@ export const useStore = create<AppState>((set, get) => ({
     {
       id: '1',
       sender: 'bot',
-      text: `أهلاً بك في منصة SHAGHOOF AI! أنا مساعدك التعليمي. كيف تحب أن نبدأ دراسة ${defaultTopics[0].titleAr} اليوم؟ 🚀`,
+      text: 'أهلاً بك في منصة SHAGHOOF AI! 🚀 أنا رفيقك التعليمي الذكي. حسابك جديد ونظيف، اختر مادتك من مجمع المناهج أو ارفع ملف المحاضرة لنبدأ رحلتك التعليمية المخصصة!',
       timestamp: '10:00 AM',
       feynmanLevel: 'intuitive'
     }
@@ -420,7 +434,9 @@ export const useStore = create<AppState>((set, get) => ({
       setTimeout(() => {
         const { language, egyptianDialect, activeModality, topics, activeTopicId } = get();
         const activeTopic = topics.find(t => t.id === activeTopicId) || topics[0];
-        const topicType = getTopicType(activeTopic);
+        const topicType = activeTopic ? getTopicType(activeTopic) : 'neural_nets';
+        const topicTitleAr = activeTopic ? activeTopic.titleAr : 'مادتك التعليمية';
+        const topicTitleEn = activeTopic ? activeTopic.titleEn : 'your course';
         const text = msg.text.toLowerCase().trim();
         const isAr = language === 'ar';
 
@@ -436,9 +452,9 @@ export const useStore = create<AppState>((set, get) => ({
         } else if (text.includes('hello') || text.includes('hi ') || text === 'hi' || text.includes('مرحبا') || text.includes('أهلا') || text.includes('ازيك') || text.includes('السلام عليكم')) {
           botResponse = isAr
             ? (egyptianDialect 
-                ? `أهلاً بيك يا بطل! جاهز نكمل محطة النهاردة في ${activeTopic.titleAr}؟ أومرني بتحب نبدأ بإيه؟ 🚀`
-                : `أهلاً ومرحباً بك! يسعدني مساعدتك في دراسة ${activeTopic.titleAr}. كيف تفضل أن نبدأ؟ 🚀`)
-            : `Hello! I am your SHAGHOOF AI Learning Assistant. Ready to explore ${activeTopic.titleEn} together today? 🚀`;
+                ? `أهلاً بيك يا بطل! جاهز نكمل محطة النهاردة في ${topicTitleAr}؟ أومرني بتحب نبدأ بإيه؟ 🚀`
+                : `أهلاً ومرحباً بك! يسعدني مساعدتك في دراسة ${topicTitleAr}. كيف تفضل أن نبدأ؟ 🚀`)
+            : `Hello! I am your SHAGHOOF AI Learning Assistant. Ready to explore ${topicTitleEn} together today? 🚀`;
         } else if (text.includes('who are you') || text.includes('who r u') || text.includes('من أنت') || text.includes('مين انت')) {
           botResponse = isAr
             ? (egyptianDialect 
@@ -458,7 +474,7 @@ export const useStore = create<AppState>((set, get) => ({
             } else if (topicType === 'rnn') {
               botResponse = 'Think of an RNN like a mental notepad while reading: each word updates your recurrent memory state, and LSTM gates decide what to remember and what to discard!';
             } else {
-              botResponse = `Think of ${activeTopic.titleEn} as a modular pipeline: each step transforms inputs through specialized representations to minimize error and maximize performance!`;
+              botResponse = `Think of ${topicTitleEn} as a modular pipeline: each step transforms inputs through specialized representations to minimize error and maximize performance!`;
             }
           } else if (text.includes('hint') || text.includes('tactic')) {
             if (topicType === 'concurrency') {
@@ -470,7 +486,7 @@ export const useStore = create<AppState>((set, get) => ({
             } else if (topicType === 'cnn') {
               botResponse = '💡 Proactive Hint: Convolutional filters achieve spatial invariance, meaning they recognize features regardless of where they appear in the image!';
             } else {
-              botResponse = `💡 Proactive Hint: Focus on the primary input representation and how the model evaluates its objective function in ${activeTopic.titleEn}!`;
+              botResponse = `💡 Proactive Hint: Focus on the primary input representation and how the model evaluates its objective function in ${topicTitleEn}!`;
             }
           } else if (text.includes('example')) {
             if (topicType === 'concurrency') {
@@ -480,7 +496,7 @@ export const useStore = create<AppState>((set, get) => ({
             } else if (topicType === 'cnn') {
               botResponse = 'Practical Example: An image classifier passes 150x150 Intel landscape pixels through 3x3 kernels to identify mountains, forests, and buildings!';
             } else {
-              botResponse = `Practical Example: In ${activeTopic.titleEn}, structured data flows into feature layers to yield high-confidence predictions!`;
+              botResponse = `Practical Example: In ${topicTitleEn}, structured data flows into feature layers to yield high-confidence predictions!`;
             }
           } else if (text.includes('slower') || text.includes('step')) {
             botResponse = 'Absolutely! We will move step-by-step at a comfortable pace for maximum comprehension.';
@@ -494,12 +510,12 @@ export const useStore = create<AppState>((set, get) => ({
             } else if (topicType === 'transformers') {
               botResponse = 'Attention Summary 📌:\n1. Tokenize text & project Q, K, V matrices.\n2. Compute parallel Self-Attention with Softmax.\n3. Multi-Head attention models diverse syntactic & semantic patterns.';
             } else {
-              botResponse = `Key Points Summary for ${activeTopic.titleEn} 📌:\n1. Formulate input representation.\n2. Process signals through modular architecture.\n3. Optimize performance iteratively.`;
+              botResponse = `Key Points Summary for ${topicTitleEn} 📌:\n1. Formulate input representation.\n2. Process signals through modular architecture.\n3. Optimize performance iteratively.`;
             }
           } else if (text.includes('understand') || text.includes('confident') || text.includes('great') || text.includes('awesome')) {
             botResponse = 'Awesome work! Your strong grasp clears the path to master this topic! 🚀';
           } else {
-            botResponse = `Great question! Regarding "${msg.text}" in ${activeTopic.titleEn}, this relates directly to how Python processes tasks using your chosen ${activeModality.toUpperCase()} learning style. Let me know if you want a code snippet or a visual breakdown!`;
+            botResponse = `Great question! Regarding "${msg.text}" in ${topicTitleEn}, this relates directly to how Python processes tasks using your chosen ${activeModality.toUpperCase()} learning style. Let me know if you want a code snippet or a visual breakdown!`;
           }
         } else {
           if (egyptianDialect) {
@@ -515,7 +531,7 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'rnn') {
                 botResponse = 'ولا يهمك يا بطل! تخيل الـ RNN دي زي شريط كاسيت ماشي خطوة بخطوة: كل كلمة بتسيب أثر في الذاكرة (Hidden State)، وخلايا الـ LSTM عندها بوابات نسيان عشان تفتكر المهم بس وما تتشتتش في الجمل الطويلة!';
               } else {
-                botResponse = `ولا يهمك يا بطل! بص يا سيدي، موضوع ${activeTopic.titleAr} فكرته الأساسية إننا بنقسم التحدي لخطوات منظمة عشان نوصل لأعلى دقة وكفاءة برمجية ممكنة!`;
+                botResponse = `ولا يهمك يا بطل! بص يا سيدي، موضوع ${topicTitleAr} فكرته الأساسية إننا بنقسم التحدي لخطوات منظمة عشان نوصل لأعلى دقة وكفاءة برمجية ممكنة!`;
               }
             } else if (text.includes('تلميح') || text.includes('رمز')) {
               if (topicType === 'concurrency') {
@@ -527,7 +543,7 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'cnn') {
                 botResponse = '💡 تلميح: فلاتر الـ Convolution بتكتشف الأنماط في الصورة بغض النظر عن مكانها (Spatial Invariance)!';
               } else {
-                botResponse = `💡 تلميح ميسر: ركز على طريقة حركة البيانات والتحويلات في خطوات ${activeTopic.titleAr}!`;
+                botResponse = `💡 تلميح ميسر: ركز على طريقة حركة البيانات والتحويلات في خطوات ${topicTitleAr}!`;
               }
             } else if (text.includes('مثال')) {
               if (topicType === 'concurrency') {
@@ -537,7 +553,7 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'cnn') {
                 botResponse = 'من عينيا! تخيل نظام تصنيف صور Intel Kaggle: المدخلات بكسلات المناظر الطبيعية، والفلاتر بتميز ملامح الجبال من الغابات والبحار بدقة عالية!';
               } else {
-                botResponse = `من عينيا! في ${activeTopic.titleAr}، بنحول البيانات الأولية إلى مدخلات مهيكلة تتيح للنموذج استخراج النتائج بدقة!`;
+                botResponse = `من عينيا! في ${topicTitleAr}، بنحول البيانات الأولية إلى مدخلات مهيكلة تتيح للنموذج استخراج النتائج بدقة!`;
               }
             } else if (text.includes('أبطأ')) {
               botResponse = 'تمام يا بطل! هنمشي خطوة بخطوة بالراحة خالص عشان تفهم كل فتفوتة في الدرس من غير أي استعجال.';
@@ -551,12 +567,12 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'transformers') {
                 botResponse = 'ملخص الانتباه 📌:\n1. تجهيز الـ Tokens ومصفوفات التضمين.\n2. حساب مصفوفات Q و K و V بالـ Softmax.\n3. معالجة النص بالكامل بالتوازي عبر كروت الشاشة GPU.';
               } else {
-                botResponse = `ملخص سريع لـ ${activeTopic.titleAr} 📌:\n1. تحديد المدخلات.\n2. المعالجة المعمارية المتخصصة.\n3. تحسين النتائج بدقة.`;
+                botResponse = `ملخص سريع لـ ${topicTitleAr} 📌:\n1. تحديد المدخلات.\n2. المعالجة المعمارية المتخصصة.\n3. تحسين النتائج بدقة.`;
               }
             } else if (text.includes('فهمت') || text.includes('سعيد') || text.includes('ممتاز') || text.includes('واضح')) {
               botResponse = 'عاش يا بطل! فخور جداً باستيعابك السريع، يلا بينا نكمل إنجاز بقية محطات الدرس! 🚀';
             } else {
-              botResponse = `سؤال ممتاز! بالنسبة لـ "${msg.text}" في موضوع ${activeTopic.titleAr}، النقطة دي متصلة بالنمط المفضل لديك (${activeModality.toUpperCase()}). تحب نطبق عليها بمثال كود عملي ولا بمخطط بصري؟`;
+              botResponse = `سؤال ممتاز! بالنسبة لـ "${msg.text}" في موضوع ${topicTitleAr}، النقطة دي متصلة بالنمط المفضل لديك (${activeModality.toUpperCase()}). تحب نطبق عليها بمثال كود عملي ولا بمخطط بصري؟`;
             }
           } else {
             if (text.includes('لم أفهم') || text.includes('غير واضح') || text.includes('أبسط') || text.includes('مبسط')) {
@@ -571,7 +587,7 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'rag') {
                 botResponse = 'لا تقلق! الـ RAG يربط الذكاء بمستنداتك الأكاديمية: يتم تقطيع الملفات لفقرات صغيرة وحفظها كمتجهات، وعند السؤال يسترجع الفقرة الدقيقة مع رقم الصفحة لمنع الهلوسة.';
               } else {
-                botResponse = `لا تقلق على الإطلاق! في ${activeTopic.titleAr} نقوم بتفكيك المفهوم إلى عناصر بسيطة متسلسلة تحقق أعلى استيعاب أكاديمي.`;
+                botResponse = `لا تقلق على الإطلاق! في ${topicTitleAr} نقوم بتفكيك المفهوم إلى عناصر بسيطة متسلسلة تحقق أعلى استيعاب أكاديمي.`;
               }
             } else if (text.includes('تلميح')) {
               if (topicType === 'concurrency') {
@@ -585,7 +601,7 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'rag') {
                 botResponse = '💡 تلميح دراسي: حافظ على نسبة التداخل (Overlap) بين الـ Chunks لضمان عدم انقطاع المعنى الدلالي بين الفقرات.';
               } else {
-                botResponse = `💡 تلميح دراسي: ركز على تسلسل الخطوات في ${activeTopic.titleAr} وطريقة تحويل المدخلات إلى نواتج دقيقة.`;
+                botResponse = `💡 تلميح دراسي: ركز على تسلسل الخطوات في ${topicTitleAr} وطريقة تحويل المدخلات إلى نواتج دقيقة.`;
               }
             } else if (text.includes('مثال')) {
               if (topicType === 'concurrency') {
@@ -599,7 +615,7 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'rag') {
                 botResponse = 'مثال عملي: طالب يسأل "ما موعد تسليم التكليف الأول؟"، الـ RAG يبحث في ملف توصيف المقرر ويرد بالنص ورقم الصفحة واسم الملف فوراً.';
               } else {
-                botResponse = `مثال عملي: في ${activeTopic.titleAr} نقوم بتطبيق الخوارزمية على عينة بيانات واقعية لتوضيح النتائج بشكل ملموس.`;
+                botResponse = `مثال عملي: في ${topicTitleAr} نقوم بتطبيق الخوارزمية على عينة بيانات واقعية لتوضيح النتائج بشكل ملموس.`;
               }
             } else if (text.includes('أبطأ')) {
               botResponse = 'بالتأكيد! سنتقدم بخطوات ميسرة ومرحلية لضمان الاستيعاب التام قبل الانتقال للجزئية التالية.';
@@ -617,12 +633,12 @@ export const useStore = create<AppState>((set, get) => ({
               } else if (topicType === 'rag') {
                 botResponse = 'ملخص الـ RAG 📌:\n1. تقسيم المستندات وتضمينها كمتجهات في Vector DB.\n2. البحث الدلالي المتجهي بأقرب تشابه Cosine.\n3. صياغة إجابة موثقة علمياً بالصفحات دون هلوسة.';
               } else {
-                botResponse = `ملخص موضوع ${activeTopic.titleAr} 📌:\n1. استيعاب المدخلات والبيانات الأساسية.\n2. تطبيق المعالجة والخوارزمية الرياضية بدقة.\n3. التحقق من كفاءة النتائج العملية.`;
+                botResponse = `ملخص موضوع ${topicTitleAr} 📌:\n1. استيعاب المدخلات والبيانات الأساسية.\n2. تطبيق المعالجة والخوارزمية الرياضية بدقة.\n3. التحقق من كفاءة النتائج العملية.`;
               }
             } else if (text.includes('فهمت') || text.includes('سعيد') || text.includes('ممتاز') || text.includes('واضح')) {
               botResponse = 'أحسنت صنعاً! فهمك المتميز يمهد الطريق لإتقان كافة مفاهيم هذا المقرر. 🚀';
             } else {
-              botResponse = `استفسار رائع! بخصوص "${msg.text}" في مقرر ${activeTopic.titleAr}، يرتبط هذا الاستفسار بكيفية تحليل واستجابة النموذج التكيفي وفق نمط التعلم (${activeModality.toUpperCase()}). هل تود الشرح بأسلوب مبسط أم أمثلة تطبيقية؟`;
+              botResponse = `استفسار رائع! بخصوص "${msg.text}" في مقرر ${topicTitleAr}، يرتبط هذا الاستفسار بكيفية تحليل واستجابة النموذج التكيفي وفق نمط التعلم (${activeModality.toUpperCase()}). هل تود الشرح بأسلوب مبسط أم أمثلة تطبيقية؟`;
             }
           }
         }

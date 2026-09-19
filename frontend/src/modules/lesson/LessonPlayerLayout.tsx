@@ -9,13 +9,14 @@ import { TutorChat } from '../chat/TutorChat';
 import { TopicSelectorModal } from '../../components/TopicSelectorModal';
 import { ProactiveAgentBanner } from '../agent/ProactiveAgentBanner';
 import { ProactiveRescueModal } from '../agent/ProactiveRescueModal';
-import { ChevronRight, ChevronLeft, RefreshCw, BookOpen } from 'lucide-react';
+import { ChevronRight, ChevronLeft, RefreshCw, BookOpen, Sparkles, FileUp, GraduationCap } from 'lucide-react';
 
 interface LessonPlayerLayoutProps {
   onOpenVARK: () => void;
+  onOpenCurriculumHub?: (tab?: 'textbooks' | 'upload_pdf' | 'moodle_scraper') => void;
 }
 
-export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVARK }) => {
+export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVARK, onOpenCurriculumHub }) => {
   const { 
     topics,
     activeTopicId,
@@ -47,6 +48,186 @@ export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVA
       setLineFocusY(e.clientY);
     }
   };
+
+  // If no topics enrolled yet (Fresh Clean Account) -> Render Inspiring Onboarding Hub
+  if (!activeTopic) {
+    return (
+      <div className="relative min-h-[calc(100vh-65px)] p-4 sm:p-6" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-10 gap-6">
+          {/* Main 70% Area: Fresh Account Onboarding Hub */}
+          <div className="lg:col-span-7 space-y-6">
+            
+            {/* Welcome Banner Card */}
+            <div className={`p-6 sm:p-8 rounded-3xl border shadow-lg relative overflow-hidden transition-all ${
+              isDark 
+                ? 'bg-gradient-to-br from-slate-900 via-slate-900/90 to-purple-950/40 border-purple-500/30' 
+                : 'bg-gradient-to-br from-white via-orange-50/40 to-purple-50/50 border-slate-200'
+            }`}>
+              <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-bl from-[#FF4D2D]/15 to-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="relative z-10 max-w-2xl space-y-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FF4D2D]/10 text-[#FF4D2D] dark:text-[#FF7355] border border-[#FF4D2D]/30 text-xs font-extrabold uppercase">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{isAr ? 'حسابك جديد ونظيف 🚀 مرحباً بك في شغوف AI' : 'Fresh Account 🚀 Welcome to SHAGHOOF AI'}</span>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white leading-tight">
+                  {isAr 
+                    ? 'ابدأ رحلتك التعليمية المخصصة الآن ✨' 
+                    : 'Start Your Adaptive AI Learning Journey ✨'}
+                </h1>
+
+                <p className="text-sm text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                  {isAr 
+                    ? 'حسابك جاهز وبداية جديدة تماماً دون أي مقررات سابقة. اختر كيف تفضل بدء دراستك اليوم عبر المسارات التالية:' 
+                    : 'Your account is fresh with zero preloaded topics. Choose how you want to begin your personalized learning journey today:'}
+                </p>
+              </div>
+            </div>
+
+            {/* 3 Interactive Onboarding Pathway Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              
+              {/* Card 1: Curriculum Hub */}
+              <div 
+                onClick={() => onOpenCurriculumHub?.('textbooks')}
+                className={`p-5 rounded-3xl border cursor-pointer group hover:scale-[1.02] transition-all flex flex-col justify-between shadow-sm hover:shadow-xl ${
+                  isDark 
+                    ? 'bg-slate-900/80 border-slate-800 hover:border-indigo-500/60 hover:bg-slate-900' 
+                    : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-indigo-100/50'
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-indigo-400 transition">
+                      {isAr ? 'مجمع المناهج والكتب' : 'Curriculum Hub'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                      {isAr 
+                        ? 'تصفح كتب المعاصر والوزارة المعتمدة للمدارس، أو كورس تدريب Route Summer 2026 للجامعة.' 
+                        : 'Explore accredited textbooks for schools (El-Moasser, Ministry) or Route Summer AI training.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-indigo-500 dark:text-indigo-400 font-extrabold text-xs">
+                  <span>{isAr ? 'تصفح المناهج 📚' : 'Browse Courses 📚'}</span>
+                  {isAr ? <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> : <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                </div>
+              </div>
+
+              {/* Card 2: PDF Upload */}
+              <div 
+                onClick={() => onOpenCurriculumHub?.('upload_pdf')}
+                className={`p-5 rounded-3xl border cursor-pointer group hover:scale-[1.02] transition-all flex flex-col justify-between shadow-sm hover:shadow-xl ${
+                  isDark 
+                    ? 'bg-slate-900/80 border-slate-800 hover:border-[#FF4D2D]/60 hover:bg-slate-900' 
+                    : 'bg-white border-slate-200 hover:border-[#FF4D2D]/40 hover:shadow-orange-100/50'
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-[#FF4D2D]/15 text-[#FF4D2D] flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <FileUp className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-[#FF4D2D] transition">
+                      {isAr ? 'رفع ملف PDF للمحاضرة' : 'Upload Lecture PDF'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                      {isAr 
+                        ? 'ارفع أي كتاب أو سلايدات PDF، وسيقوم الوكيل الذكي بتحليله وتوليد دروس تفاعلية بـ 4 أنماط فوراً.' 
+                        : 'Upload any lecture PDF or slides, and the AI agent extracts structured interactive lessons.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[#FF4D2D] dark:text-[#FF7355] font-extrabold text-xs">
+                  <span>{isAr ? 'رفع ملف PDF 📤' : 'Upload PDF 📤'}</span>
+                  {isAr ? <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> : <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                </div>
+              </div>
+
+              {/* Card 3: Moodle LMS Integration */}
+              <div 
+                onClick={() => onOpenCurriculumHub?.('moodle_scraper')}
+                className={`p-5 rounded-3xl border cursor-pointer group hover:scale-[1.02] transition-all flex flex-col justify-between shadow-sm hover:shadow-xl ${
+                  isDark 
+                    ? 'bg-slate-900/80 border-slate-800 hover:border-emerald-500/60 hover:bg-slate-900' 
+                    : 'bg-white border-slate-200 hover:border-emerald-400 hover:shadow-emerald-100/50'
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <GraduationCap className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white group-hover:text-emerald-400 transition">
+                      {isAr ? 'الربط مع Moodle LMS' : 'Connect Moodle LMS'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                      {isAr 
+                        ? 'سجل بحسابك الجامعي في Moodle لسحب المقررات والمحاضرات والتكليفات الرسمية آلياً.' 
+                        : 'Connect your university Moodle account to automatically ingest lectures and assignments.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">
+                  <span>{isAr ? 'ربط Moodle 🎓' : 'Sync Moodle 🎓'}</span>
+                  {isAr ? <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> : <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                </div>
+              </div>
+
+            </div>
+
+            {/* VARK Multi-modal Info Box */}
+            <div className={`p-4.5 rounded-2xl border flex items-center justify-between gap-4 ${
+              isDark ? 'bg-slate-900/40 border-slate-800 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-600'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <p className="text-xs leading-relaxed font-medium">
+                  {isAr 
+                    ? '💡 بمجرد اختيارك لأي مقرر، ستقوم المنصة بتكييف المحتوى تلقائياً وفق نمط تعلمك المفضل (بصري، سمعي، قراءة/كتابة، حركي).'
+                    : '💡 Once you enroll in a topic, content will adapt seamlessly to your VARK preference (Visual, Audio, Read, Kinesthetic).'}
+                </p>
+              </div>
+
+              <button
+                onClick={onOpenVARK}
+                className="px-3.5 py-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-xs font-bold shrink-0 transition"
+              >
+                {isAr ? 'تحديد نمط VARK 🎯' : 'Configure VARK 🎯'}
+              </button>
+            </div>
+
+          </div>
+
+          {/* Right Column: AI Tutor Chat (30%) */}
+          <div className="lg:col-span-3 h-[750px] lg:h-[calc(100vh-110px)] sticky top-20">
+            <TutorChat />
+          </div>
+
+        </div>
+
+        {/* Modals available in onboarding view */}
+        <TopicSelectorModal
+          isOpen={isTopicModalOpen}
+          onClose={() => setIsTopicModalOpen(false)}
+          onOpenCurriculumHub={onOpenCurriculumHub ? () => onOpenCurriculumHub('textbooks') : undefined}
+        />
+        <ProactiveRescueModal
+          isOpen={isRescueModalOpen}
+          onClose={() => setIsRescueModalOpen(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-[calc(100vh-65px)]" onMouseMove={handleMouseMove}>
@@ -210,6 +391,7 @@ export const LessonPlayerLayout: React.FC<LessonPlayerLayoutProps> = ({ onOpenVA
       <TopicSelectorModal
         isOpen={isTopicModalOpen}
         onClose={() => setIsTopicModalOpen(false)}
+        onOpenCurriculumHub={onOpenCurriculumHub ? () => onOpenCurriculumHub('textbooks') : undefined}
       />
 
       {/* Proactive Rescue Plan Modal */}

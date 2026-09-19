@@ -49,7 +49,13 @@ export function App() {
   const [isTwoPassOpen, setIsTwoPassOpen] = useState(false);
   const [isTeacherOpen, setIsTeacherOpen] = useState(false);
   const [isCurriculumHubOpen, setIsCurriculumHubOpen] = useState(false);
+  const [curriculumHubTab, setCurriculumHubTab] = useState<'textbooks' | 'upload_pdf' | 'moodle_scraper'>('textbooks');
   const [isContractsBarOpen, setIsContractsBarOpen] = useState(false);
+
+  const handleOpenCurriculumHub = (tab: 'textbooks' | 'upload_pdf' | 'moodle_scraper' = 'textbooks') => {
+    setCurriculumHubTab(tab);
+    setIsCurriculumHubOpen(true);
+  };
 
   // Championship Suite Modals State
   const [isPodcastOpen, setIsPodcastOpen] = useState(false);
@@ -87,7 +93,7 @@ export function App() {
         {/* Top Professional Navigation Bar */}
         <Navbar
           onOpenAccessibility={() => setIsAccessibilityOpen(true)}
-          onOpenCurriculumHub={() => setIsCurriculumHubOpen(true)}
+          onOpenCurriculumHub={handleOpenCurriculumHub}
           onOpenPodcast={() => setIsPodcastOpen(true)}
           onOpenRAGBenchmark={() => setIsRAGBenchmarkOpen(true)}
           onOpenKnowledgeGraph={() => setIsKnowledgeGraphOpen(true)}
@@ -97,7 +103,10 @@ export function App() {
 
         {/* Main Lesson Player Layout */}
         <main className="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 flex flex-col relative z-10">
-          <LessonPlayerLayout onOpenVARK={() => setIsVARKOpen(true)} />
+          <LessonPlayerLayout 
+            onOpenVARK={() => setIsVARKOpen(true)} 
+            onOpenCurriculumHub={handleOpenCurriculumHub}
+          />
         </main>
       </>
     );
@@ -206,6 +215,7 @@ export function App() {
         <CurriculumHubModal
           isOpen={isCurriculumHubOpen}
           onClose={() => setIsCurriculumHubOpen(false)}
+          initialTab={curriculumHubTab}
         />
 
         {/* VARK Quiz Modal */}

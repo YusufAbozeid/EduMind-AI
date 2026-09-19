@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useStore, type CourseTopic } from '../../store/useStore';
+import { useStore, defaultTopics, type CourseTopic } from '../../store/useStore';
 import { 
   BookOpen, GraduationCap, School, UploadCloud, Sparkles, CheckCircle2, 
   Globe, X, FileUp
@@ -9,6 +9,7 @@ import { MoodleHubSection } from './MoodleHubSection';
 interface CurriculumHubModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'textbooks' | 'upload_pdf' | 'moodle_scraper';
 }
 
 export interface TextbookItem {
@@ -73,6 +74,23 @@ export const PRELOADED_TEXTBOOKS: TextbookItem[] = [
 
   // 🎓 University Stage (الجامعات - Moodle والكتب الأكاديمية الدولية)
   {
+    id: 'route_summer_su26',
+    stage: 'university',
+    subCategoryAr: 'برنامج التدريب الصيفي - Route Summer 2026',
+    subCategoryEn: 'Route Summer Training 2026 (TR333 - G2)',
+    titleAr: 'كورس الذكاء الاصطناعي الشامل (Route Summer Training Su26)',
+    titleEn: 'AI & Deep Learning Intensive (Route Su26 - TR333)',
+    publisherAr: 'أكاديمية Route / Moodle Ingested 🎓',
+    publisherEn: 'Route Academy Official Syllabus',
+    badgeAr: 'Route Su26',
+    badgeEn: 'Route Su26',
+    coverGradient: 'from-[#FF4D2D] to-purple-900',
+    topicsCount: 6,
+    descriptionAr: 'منهاج التدريب الصيفي يشمل معالجة النصوص، والـ CNN، والـ RNN، والضبط الدقيق LoRA و Streamlit، و RAG، ومشروع التخرج.',
+    descriptionEn: 'Full 6-session syllabus covering text preprocessing, CNN, RNN, LoRA/QLoRA, RAG, and capstone project.',
+    sampleTopics: defaultTopics
+  },
+  {
     id: 'moodle_cs_cu',
     stage: 'university',
     subCategoryAr: 'كلية الحاسبات والذكاء الاصطناعي - Moodle LMS',
@@ -113,12 +131,12 @@ export const PRELOADED_TEXTBOOKS: TextbookItem[] = [
   }
 ];
 
-export const CurriculumHubModal: React.FC<CurriculumHubModalProps> = ({ isOpen, onClose }) => {
+export const CurriculumHubModal: React.FC<CurriculumHubModalProps> = ({ isOpen, onClose, initialTab }) => {
   const { language, setActiveTopicId, addTopics, addMessage, addXP, themeMode } = useStore();
   const isAr = language === 'ar';
   const isDark = themeMode === 'dark';
 
-  const [activeTab, setActiveTab] = useState<'textbooks' | 'upload_pdf' | 'moodle_scraper'>('textbooks');
+  const [activeTab, setActiveTab] = useState<'textbooks' | 'upload_pdf' | 'moodle_scraper'>(initialTab || 'textbooks');
   const [selectedStage, setSelectedStage] = useState<'all' | 'school' | 'university'>('all');
   
   // Custom PDF Upload Simulation State
@@ -127,8 +145,13 @@ export const CurriculumHubModal: React.FC<CurriculumHubModalProps> = ({ isOpen, 
   const [pdfFileName, setPdfFileName] = useState<string>('');
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
 
-
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
 
   if (!isOpen) return null;
 

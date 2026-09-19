@@ -23,10 +23,10 @@ export const ProactiveAgentBanner: React.FC<ProactiveAgentBannerProps> = ({ onOp
 
   const isAr = language === 'ar';
   const activeTopic = topics.find(t => t.id === activeTopicId) || topics[0];
+  if (!activeTopic || isDismissed) return null;
+
   const currentMastery = topicMastery ? topicMastery[activeTopic.id] : undefined;
   const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic, currentMastery);
-
-  if (isDismissed) return null;
 
   return (
     <div 

@@ -5,9 +5,10 @@ import { BookOpen, X, Check, Brain, Sparkles, Eye, MessageCircle, Calculator, Ch
 interface TopicSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenCurriculumHub?: () => void;
 }
 
-export const TopicSelectorModal: React.FC<TopicSelectorModalProps> = ({ isOpen, onClose }) => {
+export const TopicSelectorModal: React.FC<TopicSelectorModalProps> = ({ isOpen, onClose, onOpenCurriculumHub }) => {
   const { topics, activeTopicId, setActiveTopicId, language, themeMode } = useStore();
   const isAr = language === 'ar';
   const isDark = themeMode === 'dark';
@@ -57,10 +58,14 @@ export const TopicSelectorModal: React.FC<TopicSelectorModalProps> = ({ isOpen, 
             </div>
             <div>
               <h3 id="topic-selector-title" className="text-sm sm:text-base font-extrabold leading-tight">
-                {isAr ? 'كورس التدريب الصيفي: Summer Training (Su26 - TR333 - G2 - Pr)' : 'Summer Training Syllabus (Su26 - TR333 - G2 - Pr)'}
+                {topics.length > 0 
+                  ? (isAr ? 'المقررات وموضوعات المنهج المتاحة' : 'Enrolled Curriculum Topics') 
+                  : (isAr ? 'موضوعات المنهج (حساب جديد)' : 'Curriculum Topics (Fresh Account)')}
               </h3>
               <p className="text-[11px] text-[#FF4D2D] dark:text-[#FF7355] font-semibold">
-                {isAr ? 'مستخرج ومسحوب مباشرة من منصة Moodle التعليمية 🎓' : 'Real Moodle ingested course syllabus 🎓'}
+                {topics.length > 0
+                  ? (isAr ? `${topics.length} موضوع متاح للدراسة التفاعلية بـ 4 أنماط VARK` : `${topics.length} topics available for interactive study`)
+                  : (isAr ? 'لم تقم بإضافة أي مقررات بعد - ابدأ باختيار مادتك الأولى 🚀' : 'No topics enrolled yet - add your first course 🚀')}
               </p>
             </div>
           </div>
@@ -74,75 +79,106 @@ export const TopicSelectorModal: React.FC<TopicSelectorModalProps> = ({ isOpen, 
           </button>
         </div>
 
-        {/* Topics List with smooth scrolling */}
-        <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
-          {topics.map((t) => {
-            const IconComponent = getTopicIcon(t.icon);
-            const isActive = activeTopicId === t.id;
-
-            return (
+        {/* Topics List or Empty State */}
+        {topics.length === 0 ? (
+          <div className="text-center py-10 px-4 space-y-4">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-[#FF4D2D]/10 text-[#FF4D2D] flex items-center justify-center border border-[#FF4D2D]/20 shadow-sm">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
+                {isAr ? 'لم تقم بتسجيل أي مقررات دراسية بعد' : 'No Topics Enrolled Yet'}
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                {isAr
+                  ? 'حسابك جديد ونظيف تماماً! يمكنك تصفح مجمع المناهج لاختيار أول مقرر مدرسي أو جامعي، أو رفع ملف المحاضرة PDF للبدء فوراً.'
+                  : 'Your account is completely clean! Browse the Curriculum Hub to choose your first school or university course, or upload a lecture PDF.'}
+              </p>
+            </div>
+            {onOpenCurriculumHub && (
               <button
-                key={t.id}
                 type="button"
                 onClick={() => {
-                  setActiveTopicId(t.id);
                   onClose();
+                  onOpenCurriculumHub();
                 }}
-                className={`w-full text-start px-3.5 py-2.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
-                  isActive
-                    ? isDark 
-                      ? 'bg-[#FF4D2D]/15 border-[#FF4D2D] shadow-md shadow-[#FF4D2D]/10 ring-1 ring-[#FF4D2D]/50'
-                      : 'bg-[#FF4D2D]/10 border-[#FF4D2D] shadow-sm ring-1 ring-[#FF4D2D]/50'
-                    : isDark
-                      ? 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-                      : 'bg-slate-50 border-slate-200 hover:border-[#FF4D2D]/30 hover:bg-[#FF4D2D]/5'
-                }`}
+                className="mt-2 px-6 py-2.5 rounded-2xl bg-[#FF4D2D] hover:bg-[#E03E1C] text-white font-extrabold text-xs shadow-md shadow-[#FF4D2D]/25 transition hover:scale-105 inline-flex items-center gap-2"
               >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
-                    isActive 
-                      ? 'bg-[#FF4D2D] border-[#FF4D2D] text-white' 
-                      : isDark ? 'bg-slate-800 border-slate-700 text-[#FF7355]' : 'bg-white border-slate-200 text-[#FF4D2D]'
-                  }`}>
-                    <IconComponent className="w-4 h-4" />
-                  </div>
-
-                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#FF4D2D]/10 text-[#FF4D2D] dark:text-[#FF7355] font-extrabold border border-[#FF4D2D]/30 shrink-0">
-                    {t.moduleCode}
-                  </span>
-
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
-                      {isAr ? t.titleAr : t.titleEn}
-                    </h4>
-                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
-                      {isAr ? t.descriptionAr : t.descriptionEn}
-                    </p>
-                  </div>
-
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0 hidden md:inline-block">
-                    {t.badge}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  {isActive ? (
-                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/30 text-[11px]">
-                      <Check className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'الدرس الحالي' : 'Active'}</span>
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-300 transition text-[11px] font-bold">
-                      <span>{isAr ? 'بدء الدرس' : 'Start'}</span>
-                      {isAr ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    </span>
-                  )}
-                </div>
-
+                <Sparkles className="w-4 h-4" />
+                <span>{isAr ? 'فتح مجمع المناهج والكتب 📚' : 'Open Curriculum Hub 📚'}</span>
               </button>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
+            {topics.map((t) => {
+              const IconComponent = getTopicIcon(t.icon);
+              const isActive = activeTopicId === t.id;
+
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveTopicId(t.id);
+                    onClose();
+                  }}
+                  className={`w-full text-start px-3.5 py-2.5 rounded-2xl border cursor-pointer transition-all flex items-center justify-between gap-3 ${
+                    isActive
+                      ? isDark 
+                        ? 'bg-[#FF4D2D]/15 border-[#FF4D2D] shadow-md shadow-[#FF4D2D]/10 ring-1 ring-[#FF4D2D]/50'
+                        : 'bg-[#FF4D2D]/10 border-[#FF4D2D] shadow-sm ring-1 ring-[#FF4D2D]/50'
+                      : isDark
+                        ? 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                        : 'bg-slate-50 border-slate-200 hover:border-[#FF4D2D]/30 hover:bg-[#FF4D2D]/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+                      isActive 
+                        ? 'bg-[#FF4D2D] border-[#FF4D2D] text-white' 
+                        : isDark ? 'bg-slate-800 border-slate-700 text-[#FF7355]' : 'bg-white border-slate-200 text-[#FF4D2D]'
+                    }`}>
+                      <IconComponent className="w-4 h-4" />
+                    </div>
+
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-[#FF4D2D]/10 text-[#FF4D2D] dark:text-[#FF7355] font-extrabold border border-[#FF4D2D]/30 shrink-0">
+                      {t.moduleCode}
+                    </span>
+
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                        {isAr ? t.titleAr : t.titleEn}
+                      </h4>
+                      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
+                        {isAr ? t.descriptionAr : t.descriptionEn}
+                      </p>
+                    </div>
+
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0 hidden md:inline-block">
+                      {t.badge}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isActive ? (
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-500/10 px-2.5 py-1 rounded-xl border border-emerald-500/30 text-[11px]">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{isAr ? 'الدرس الحالي' : 'Active'}</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-300 transition text-[11px] font-bold">
+                        <span>{isAr ? 'بدء الدرس' : 'Start'}</span>
+                        {isAr ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                      </span>
+                    )}
+                  </div>
+
+                </button>
+              );
+            })}
+          </div>
+        )}
 
       </div>
     </div>

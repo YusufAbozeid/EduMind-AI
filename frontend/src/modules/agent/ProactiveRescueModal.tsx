@@ -51,11 +51,11 @@ export const ProactiveRescueModal: React.FC<ProactiveRescueModalProps> = ({ isOp
     setActionFeedback(null);
   }, [activeTopicId, isOpen]);
 
+  if (!isOpen || !activeTopic) return null;
+
   const currentMastery = topicMastery ? topicMastery[activeTopic.id] : undefined;
   const plan: RescuePlan = ProactiveAgentService.getRescuePlanForTopic(activeTopic, currentMastery);
   const currentStep = plan.steps[currentStepIdx] || plan.steps[0];
-
-  if (!isOpen) return null;
 
   // Execute Agent Tool Action
   const handleExecuteToolAction = () => {
