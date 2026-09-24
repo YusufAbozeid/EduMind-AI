@@ -17,12 +17,15 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 Days
     
     # CORS Origins (Scoped for Production Security)
+    # Reads ALLOWED_ORIGINS env var (comma-separated) and merges with defaults
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:8080",
         "http://127.0.0.1:5173",
-        "http://127.0.0.1:8000"
+        "http://127.0.0.1:8000",
+        # Production origins (Cloudflare Pages)
+        "https://shaghoof-ai.pages.dev",
     ]
     
     # Rate Limiting Controls
@@ -31,4 +34,15 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
 
+
+def _build_cors_origins() -> List[str]:
+    """Merge default CORS origins with ALLOWED_ORIGINS env var."""
+    origins = list(settings.BACKEND_CORS_ORIGINS)
+    extra = os.getenv("ALLOWED_ORIGINS", "")
+    if extra:
+        origins.extend([o.strip() for o in extra.split(",") if o.strip()])
+    return list(dict.fromkeys(origins))  # deduplicate while preserving order
+
+
 settings = Settings()
+settings.BACKEND_CORS_ORIGINS = _build_cors_origins()

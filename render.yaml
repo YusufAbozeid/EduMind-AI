@@ -1,0 +1,21 @@
+# Render.com Blueprint – SHAGHOOF AI Backend
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: shaghoof-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "https://shaghoof-ai.pages.dev,https://*.shaghoof-ai.pages.dev"
