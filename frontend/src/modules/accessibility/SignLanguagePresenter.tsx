@@ -1,402 +1,93 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useStore } from '../../store/useStore';
-import { X, Play, Pause, RotateCcw, SkipForward, SkipBack, Hand } from 'lucide-react';
+import { 
+  X, Play, Pause, RotateCcw, SkipForward, SkipBack, Hand, 
+  Sparkles, Send, RefreshCw
+} from 'lucide-react';
+import { 
+  SignLanguageService, 
+  type BodyPoseFrame, 
+  type SignTranslationResponse 
+} from '../../services/signLanguageService';
 
 /* ═══════════════════════════════════════════════════════════════
-   TYPES
+   KINEMATIC CONSTANTS & TYPES
    ═══════════════════════════════════════════════════════════════ */
-
-interface BodyPose {
-  headTilt: number;       // Z-axis rotation (-15..15)
-  headNod: number;        // X-axis rotation (-10..10)
-  
-  leftUpperArm: number;   // Z-axis (0=down, 90=horizontal, 140=up)
-  leftForearm: number;    // X-axis (0=straight, -140=fully bent)
-  rightUpperArm: number;
-  rightForearm: number;
-
-  leftWrist: number;      // Z rotation for hand orientation
-  rightWrist: number;
-  
-  torsoTwist: number;     // Y-axis rotation (-10..10)
-}
-
-interface SignPhrase {
-  keywords: string[];           // Words that trigger this phrase
-  meaningAr: string;            // Arabic meaning label
-  meaningEn: string;            // English meaning label
-  poses: BodyPose[];            // Sequence of poses (animated in order)
-  durationMs: number;           // Total duration for this phrase
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   NEUTRAL / REST POSE
-   ═══════════════════════════════════════════════════════════════ */
-
-const NEUTRAL: BodyPose = {
-  headTilt: 0, headNod: 0,
-  leftUpperArm: 10, leftForearm: -15,
-  rightUpperArm: 10, rightForearm: -15,
-  leftWrist: 0, rightWrist: 0,
-  torsoTwist: 0,
-};
-
-/* ═══════════════════════════════════════════════════════════════
-   PHRASE-BASED SIGN DICTIONARY
-   Each entry represents a CONCEPT, not a word.
-   The poses array creates a flowing multi-step gesture.
-   ═══════════════════════════════════════════════════════════════ */
-
-const PHRASE_SIGNS: SignPhrase[] = [
-  // ── AI & Intelligence concepts ──
-  {
-    keywords: ['الذكاء', 'الاصطناعي', 'ذكاء', 'اصطناعي'],
-    meaningAr: 'الذكاء الاصطناعي',
-    meaningEn: 'Artificial Intelligence',
-    durationMs: 3000,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -120, rightUpperArm: 90, rightForearm: -120, headNod: -5 },
-      { ...NEUTRAL, leftUpperArm: 120, leftForearm: -60, rightUpperArm: 120, rightForearm: -60, headTilt: 0 },
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -40, rightUpperArm: 80, rightForearm: -40 },
-    ],
-  },
-  {
-    keywords: ['شبكة', 'شبكات', 'عصبية', 'الشبكة', 'العصبية'],
-    meaningAr: 'الشبكات العصبية',
-    meaningEn: 'Neural Networks',
-    durationMs: 3200,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -100, rightUpperArm: 80, rightForearm: -100 },
-      { ...NEUTRAL, leftUpperArm: 100, leftForearm: -90, rightUpperArm: 60, rightForearm: -110, headTilt: -5 },
-      { ...NEUTRAL, leftUpperArm: 60, leftForearm: -110, rightUpperArm: 100, rightForearm: -90, headTilt: 5 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -80, rightUpperArm: 90, rightForearm: -80, headNod: -3 },
-    ],
-  },
-  // ── Opportunity / Availability ──
-  {
-    keywords: ['يوفر', 'يقدم', 'يتيح', 'يمنح', 'توفر'],
-    meaningAr: 'يُوفِّر / يُقدِّم',
-    meaningEn: 'Provides / Offers',
-    durationMs: 2400,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 60, leftForearm: -90, rightUpperArm: 60, rightForearm: -90 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -30, rightUpperArm: 90, rightForearm: -30, torsoTwist: 3 },
-    ],
-  },
-  {
-    keywords: ['كثير', 'الكثير', 'عديد', 'العديد', 'متعدد'],
-    meaningAr: 'الكثير / العديد',
-    meaningEn: 'Many / Numerous',
-    durationMs: 2200,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 100, leftForearm: -20, rightUpperArm: 100, rightForearm: -20 },
-      { ...NEUTRAL, leftUpperArm: 130, leftForearm: -10, rightUpperArm: 130, rightForearm: -10, headNod: -5 },
-    ],
-  },
-  {
-    keywords: ['فرص', 'الفرص', 'فرصة', 'إمكانيات', 'امكانيات'],
-    meaningAr: 'الفرص / الإمكانيات',
-    meaningEn: 'Opportunities',
-    durationMs: 2800,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 70, leftForearm: -80, rightUpperArm: 70, rightForearm: -80 },
-      { ...NEUTRAL, leftUpperArm: 130, leftForearm: -20, rightUpperArm: 130, rightForearm: -20, headNod: -8 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -40, rightUpperArm: 90, rightForearm: -40 },
-    ],
-  },
-  // ── Learning concepts ──
-  {
-    keywords: ['تعلم', 'التعلم', 'يتعلم', 'تتعلم', 'بتتعلم'],
-    meaningAr: 'التعلُّم',
-    meaningEn: 'Learning',
-    durationMs: 2600,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 120, leftForearm: -130, headNod: -5 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -50, rightUpperArm: 70, rightForearm: -60, headNod: 3 },
-    ],
-  },
-  {
-    keywords: ['تدريب', 'تدرب', 'تتدرب', 'بتتدرب', 'التدريب'],
-    meaningAr: 'التدريب',
-    meaningEn: 'Training',
-    durationMs: 2800,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 70, leftForearm: -100, rightUpperArm: 70, rightForearm: -100 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -60, rightUpperArm: 50, rightForearm: -120 },
-      { ...NEUTRAL, leftUpperArm: 50, leftForearm: -120, rightUpperArm: 90, rightForearm: -60 },
-    ],
-  },
-  // ── Data ──
-  {
-    keywords: ['بيانات', 'البيانات', 'داتا', 'معلومات', 'المعلومات'],
-    meaningAr: 'البيانات / المعلومات',
-    meaningEn: 'Data / Information',
-    durationMs: 2400,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -90, rightUpperArm: 80, rightForearm: -90, headTilt: -3 },
-      { ...NEUTRAL, leftUpperArm: 60, leftForearm: -100, rightUpperArm: 100, rightForearm: -80, torsoTwist: 5 },
-    ],
-  },
-  // ── Model / Weights ──
-  {
-    keywords: ['نموذج', 'النموذج', 'موديل'],
-    meaningAr: 'النموذج',
-    meaningEn: 'Model',
-    durationMs: 2400,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -80, rightUpperArm: 90, rightForearm: -80 },
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -90, rightUpperArm: 80, rightForearm: -90, headNod: 3 },
-    ],
-  },
-  {
-    keywords: ['أوزان', 'الأوزان', 'وزن', 'أوزن'],
-    meaningAr: 'الأوزان والمعاملات',
-    meaningEn: 'Weights & Parameters',
-    durationMs: 2600,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -40, rightUpperArm: 80, rightForearm: -40 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -30, rightUpperArm: 70, rightForearm: -50, headTilt: 8 },
-      { ...NEUTRAL, leftUpperArm: 70, leftForearm: -50, rightUpperArm: 90, rightForearm: -30, headTilt: -8 },
-    ],
-  },
-  // ── Error / Correct ──
-  {
-    keywords: ['خطأ', 'خطا', 'أخطاء', 'غلط', 'مش', 'مضبوطة', 'مظبوطة'],
-    meaningAr: 'خطأ / غير صحيح',
-    meaningEn: 'Error / Incorrect',
-    durationMs: 2200,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 70, leftForearm: -100, rightUpperArm: 70, rightForearm: -100, headTilt: -10 },
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -60, rightUpperArm: 80, rightForearm: -60, headTilt: 10 },
-    ],
-  },
-  {
-    keywords: ['صحيح', 'تمام', 'مظبوط', 'صح', 'ممتاز', 'بطل', 'عاش', 'أحسنت'],
-    meaningAr: 'صحيح / ممتاز!',
-    meaningEn: 'Correct / Excellent!',
-    durationMs: 2000,
-    poses: [
-      { ...NEUTRAL, rightUpperArm: 130, rightForearm: -20, rightWrist: 10, headNod: -8 },
-      { ...NEUTRAL, rightUpperArm: 140, rightForearm: -10, rightWrist: 15, headNod: -5, headTilt: 5 },
-    ],
-  },
-  // ── Forward / Backward pass ──
-  {
-    keywords: ['تمرير', 'التمرير', 'الخلفي', 'الأمامي', 'بنرجع', 'بالراجع'],
-    meaningAr: 'التمرير (الأمامي/الخلفي)',
-    meaningEn: 'Forward / Backward Pass',
-    durationMs: 3000,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 50, leftForearm: -30, rightUpperArm: 90, rightForearm: -40, torsoTwist: -5 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -40, rightUpperArm: 50, rightForearm: -30, torsoTwist: 5 },
-      { ...NEUTRAL, leftUpperArm: 70, leftForearm: -60, rightUpperArm: 70, rightForearm: -60 },
-    ],
-  },
-  // ── Explanation / Understanding ──
-  {
-    keywords: ['تخيل', 'فهم', 'نفهم', 'بص', 'افهم', 'اسمع', 'يعني'],
-    meaningAr: 'تخيَّل / افهم',
-    meaningEn: 'Imagine / Understand',
-    durationMs: 2600,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 100, leftForearm: -130, headNod: -8 },
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -50, rightUpperArm: 80, rightForearm: -50, headNod: 3 },
-    ],
-  },
-  // ── Fixing / Adjusting ──
-  {
-    keywords: ['نعدل', 'تعدل', 'بنعدل', 'ضبط', 'تظبط', 'بتظبط', 'تصحيح', 'تصلح'],
-    meaningAr: 'ضبط / تعديل',
-    meaningEn: 'Adjust / Fix',
-    durationMs: 2600,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -100, rightUpperArm: 60, rightForearm: -80 },
-      { ...NEUTRAL, leftUpperArm: 60, leftForearm: -80, rightUpperArm: 80, rightForearm: -100, torsoTwist: 3 },
-      { ...NEUTRAL, leftUpperArm: 70, leftForearm: -60, rightUpperArm: 70, rightForearm: -60 },
-    ],
-  },
-  // ── Steps / Sequence ──
-  {
-    keywords: ['خطوة', 'خطوات', 'بخطوة', 'تتابع', 'الإشارات', 'بتمشي'],
-    meaningAr: 'خطوة بخطوة',
-    meaningEn: 'Step by Step',
-    durationMs: 2800,
-    poses: [
-      { ...NEUTRAL, rightUpperArm: 90, rightForearm: -50, torsoTwist: -5 },
-      { ...NEUTRAL, rightUpperArm: 90, rightForearm: -50, leftUpperArm: 90, leftForearm: -50, torsoTwist: 5 },
-      { ...NEUTRAL, leftUpperArm: 90, leftForearm: -50, torsoTwist: 0 },
-    ],
-  },
-  // ── Rest / Break ──
-  {
-    keywords: ['استراحة', 'راحة', 'استريح', 'نفس', 'بريك'],
-    meaningAr: 'استراحة',
-    meaningEn: 'Take a Break',
-    durationMs: 2400,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 50, leftForearm: -90, rightUpperArm: 50, rightForearm: -90, headNod: 5 },
-      { ...NEUTRAL, leftUpperArm: 30, leftForearm: -40, rightUpperArm: 30, rightForearm: -40, headNod: 8 },
-    ],
-  },
-  // ── Layer / Level ──
-  {
-    keywords: ['طبقة', 'طبقات', 'مستوى'],
-    meaningAr: 'طبقة / مستوى',
-    meaningEn: 'Layer / Level',
-    durationMs: 2200,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -40, rightUpperArm: 80, rightForearm: -40, headTilt: 0 },
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -40, rightUpperArm: 80, rightForearm: -40, headTilt: 0, torsoTwist: -3 },
-    ],
-  },
-  // ── Input / Output ──
-  {
-    keywords: ['مدخلات', 'الإدخال', 'إدخال'],
-    meaningAr: 'المدخلات',
-    meaningEn: 'Inputs',
-    durationMs: 2200,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 60, leftForearm: -40, rightUpperArm: 60, rightForearm: -40, torsoTwist: 5 },
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -70, rightUpperArm: 80, rightForearm: -70, torsoTwist: 0 },
-    ],
-  },
-  {
-    keywords: ['مخرجات', 'الإخراج', 'إخراج', 'النتيجة', 'نتيجة'],
-    meaningAr: 'المخرجات / النتيجة',
-    meaningEn: 'Outputs / Result',
-    durationMs: 2200,
-    poses: [
-      { ...NEUTRAL, leftUpperArm: 80, leftForearm: -70, rightUpperArm: 80, rightForearm: -70 },
-      { ...NEUTRAL, leftUpperArm: 110, leftForearm: -20, rightUpperArm: 110, rightForearm: -20, headNod: -3 },
-    ],
-  },
-];
-
-// Fallback generic signing for unmatched text segments
-const GENERIC_SIGN: SignPhrase = {
-  keywords: [],
-  meaningAr: 'عبارة عامة',
-  meaningEn: 'General phrase',
-  durationMs: 2400,
-  poses: [
-    { ...NEUTRAL, leftUpperArm: 70, leftForearm: -60, rightUpperArm: 50, rightForearm: -80, headTilt: -3 },
-    { ...NEUTRAL, leftUpperArm: 50, leftForearm: -80, rightUpperArm: 70, rightForearm: -60, headTilt: 3 },
-  ],
-};
-
-/* ═══════════════════════════════════════════════════════════════
-   PHRASE PARSER — groups text by meaning, not word-by-word
-   ═══════════════════════════════════════════════════════════════ */
-
-interface ParsedSegment {
-  text: string;
-  sign: SignPhrase;
-}
-
-function parseTextToPhrases(text: string): ParsedSegment[] {
-  const words = text.split(/\s+/).filter(w => w.length > 0);
-  const segments: ParsedSegment[] = [];
-  let i = 0;
-
-  while (i < words.length) {
-    let matched = false;
-
-    // Try to match longest phrase first (up to 4 words)
-    for (let len = Math.min(4, words.length - i); len >= 1; len--) {
-      const chunk = words.slice(i, i + len);
-      const cleanChunk = chunk.map(w => w.replace(/[.,!?؛،:؟()"']/g, ''));
-
-      const sign = PHRASE_SIGNS.find(s =>
-        cleanChunk.some(cw => s.keywords.includes(cw))
-      );
-
-      if (sign) {
-        // Absorb adjacent related words too
-        let end = i + len;
-        while (end < words.length && end < i + len + 2) {
-          const nextClean = words[end].replace(/[.,!?؛،:؟()"']/g, '');
-          if (sign.keywords.includes(nextClean)) {
-            end++;
-          } else {
-            break;
-          }
-        }
-        segments.push({ text: words.slice(i, end).join(' '), sign });
-        i = end;
-        matched = true;
-        break;
-      }
-    }
-
-    if (!matched) {
-      // Group 2-3 unmatched words together as one generic phrase
-      const groupSize = Math.min(3, words.length - i);
-      const chunk = words.slice(i, i + groupSize).join(' ');
-      // Generate varied generic pose based on text hash
-      let h = 0;
-      for (let c = 0; c < chunk.length; c++) h = (h * 31 + chunk.charCodeAt(c)) & 0x7fff;
-      const varied: SignPhrase = {
-        ...GENERIC_SIGN,
-        meaningAr: chunk,
-        meaningEn: chunk,
-        poses: [
-          { ...NEUTRAL, leftUpperArm: 50 + (h % 40), leftForearm: -(40 + (h % 50)), rightUpperArm: 40 + ((h >> 3) % 50), rightForearm: -(30 + ((h >> 5) % 60)), headTilt: (h % 10) - 5 },
-          { ...NEUTRAL, leftUpperArm: 40 + ((h >> 2) % 50), leftForearm: -(30 + ((h >> 4) % 60)), rightUpperArm: 50 + ((h >> 1) % 40), rightForearm: -(40 + ((h >> 6) % 50)), headTilt: -(h % 8 - 4) },
-        ],
-      };
-      segments.push({ text: chunk, sign: varied });
-      i += groupSize;
-    }
-  }
-
-  return segments;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   THREE.JS HUMANOID BUILDER
-   ═══════════════════════════════════════════════════════════════ */
-
-function lerpPose(a: BodyPose, b: BodyPose, t: number): BodyPose {
-  const l = (x: number, y: number) => x + (y - x) * t;
-  return {
-    headTilt: l(a.headTilt, b.headTilt),
-    headNod: l(a.headNod, b.headNod),
-    leftUpperArm: l(a.leftUpperArm, b.leftUpperArm),
-    leftForearm: l(a.leftForearm, b.leftForearm),
-    rightUpperArm: l(a.rightUpperArm, b.rightUpperArm),
-    rightForearm: l(a.rightForearm, b.rightForearm),
-    leftWrist: l(a.leftWrist, b.leftWrist),
-    rightWrist: l(a.rightWrist, b.rightWrist),
-    torsoTwist: l(a.torsoTwist, b.torsoTwist),
-  };
-}
 
 const DEG = Math.PI / 180;
 
-interface HumanoidParts {
+const NEUTRAL_POSE: BodyPoseFrame = {
+  headTilt: 0,
+  headNod: 0,
+  leftUpperArm: 10,
+  leftForearm: -15,
+  rightUpperArm: 10,
+  rightForearm: -15,
+  leftWrist: 0,
+  rightWrist: 0,
+  torsoTwist: 0,
+  leftHandShape: 'neutral',
+  rightHandShape: 'neutral',
+  facialExpression: 'neutral',
+};
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function lerpPose(cur: BodyPoseFrame, tgt: BodyPoseFrame, t: number): BodyPoseFrame {
+  return {
+    headTilt: lerp(cur.headTilt, tgt.headTilt, t),
+    headNod: lerp(cur.headNod, tgt.headNod, t),
+    leftUpperArm: lerp(cur.leftUpperArm, tgt.leftUpperArm, t),
+    leftForearm: lerp(cur.leftForearm, tgt.leftForearm, t),
+    rightUpperArm: lerp(cur.rightUpperArm, tgt.rightUpperArm, t),
+    rightForearm: lerp(cur.rightForearm, tgt.rightForearm, t),
+    leftWrist: lerp(cur.leftWrist, tgt.leftWrist, t),
+    rightWrist: lerp(cur.rightWrist, tgt.rightWrist, t),
+    torsoTwist: lerp(cur.torsoTwist, tgt.torsoTwist, t),
+    leftHandShape: tgt.leftHandShape,
+    rightHandShape: tgt.rightHandShape,
+    facialExpression: tgt.facialExpression,
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   THREE.JS ADVANCED HUMANOID RIG
+   ═══════════════════════════════════════════════════════════════ */
+
+interface HumanoidRig {
+  root: THREE.Group;
   head: THREE.Group;
   torso: THREE.Mesh;
   leftUpperArm: THREE.Group;
   leftForearm: THREE.Group;
-  leftHand: THREE.Mesh;
+  leftHandGroup: THREE.Group;
+  leftFingers: THREE.Mesh[];
+  leftThumb: THREE.Mesh;
   rightUpperArm: THREE.Group;
   rightForearm: THREE.Group;
-  rightHand: THREE.Mesh;
+  rightHandGroup: THREE.Group;
+  rightFingers: THREE.Mesh[];
+  rightThumb: THREE.Mesh;
+  leftEyebrow: THREE.Mesh;
+  rightEyebrow: THREE.Mesh;
 }
 
-function createHumanoid(scene: THREE.Scene): HumanoidParts {
-  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe8c9a0, roughness: 0.6, metalness: 0.05 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5f, roughness: 0.7, metalness: 0.1 });
-  const hairMat = new THREE.MeshStandardMaterial({ color: 0x2d1f14, roughness: 0.9, metalness: 0 });
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.3 });
-  const lipMat = new THREE.MeshStandardMaterial({ color: 0xc4826e, roughness: 0.5 });
+function createHumanoidRig(scene: THREE.Scene): HumanoidRig {
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xefd3b5, roughness: 0.55, metalness: 0.05 });
+  const shirtMat = new THREE.MeshStandardMaterial({ color: 0x0f3460, roughness: 0.65, metalness: 0.1 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.9 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x16213e, roughness: 0.2 });
+  const browMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 });
+  const lipMat = new THREE.MeshStandardMaterial({ color: 0xb56576, roughness: 0.5 });
 
   const root = new THREE.Group();
   scene.add(root);
 
   // ── Torso ──
-  const torsoGeo = new THREE.CapsuleGeometry(0.38, 0.7, 8, 16);
+  const torsoGeo = new THREE.CapsuleGeometry(0.38, 0.72, 8, 16);
   const torso = new THREE.Mesh(torsoGeo, shirtMat);
   torso.position.set(0, 0.3, 0);
   torso.castShadow = true;
@@ -405,12 +96,12 @@ function createHumanoid(scene: THREE.Scene): HumanoidParts {
   // ── Neck ──
   const neckGeo = new THREE.CylinderGeometry(0.1, 0.12, 0.18, 12);
   const neck = new THREE.Mesh(neckGeo, skinMat);
-  neck.position.set(0, 0.85, 0);
+  neck.position.set(0, 0.86, 0);
   root.add(neck);
 
   // ── Head Group ──
   const headGroup = new THREE.Group();
-  headGroup.position.set(0, 1.1, 0);
+  headGroup.position.set(0, 1.12, 0);
   root.add(headGroup);
 
   const headGeo = new THREE.SphereGeometry(0.28, 24, 24);
@@ -426,187 +117,284 @@ function createHumanoid(scene: THREE.Scene): HumanoidParts {
   hair.scale.set(1, 1.15, 0.98);
   headGroup.add(hair);
 
-  // Eyes
+  // Eyes & Eyebrows
   const eyeGeo = new THREE.SphereGeometry(0.04, 12, 12);
   const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
   leftEye.position.set(-0.1, 0.02, 0.24);
   headGroup.add(leftEye);
+
   const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
   rightEye.position.set(0.1, 0.02, 0.24);
   headGroup.add(rightEye);
 
-  // Eye whites
-  const eyeWhiteGeo = new THREE.SphereGeometry(0.055, 12, 12);
-  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
-  const leftEyeWhite = new THREE.Mesh(eyeWhiteGeo, eyeWhiteMat);
-  leftEyeWhite.position.set(-0.1, 0.02, 0.22);
-  headGroup.add(leftEyeWhite);
-  const rightEyeWhite = new THREE.Mesh(eyeWhiteGeo, eyeWhiteMat);
-  rightEyeWhite.position.set(0.1, 0.02, 0.22);
-  headGroup.add(rightEyeWhite);
+  const browGeo = new THREE.BoxGeometry(0.08, 0.015, 0.02);
+  const leftEyebrow = new THREE.Mesh(browGeo, browMat);
+  leftEyebrow.position.set(-0.1, 0.08, 0.25);
+  headGroup.add(leftEyebrow);
 
-  // Nose
-  const noseGeo = new THREE.SphereGeometry(0.035, 8, 8);
-  const nose = new THREE.Mesh(noseGeo, skinMat);
-  nose.position.set(0, -0.04, 0.26);
-  nose.scale.set(0.7, 1, 0.6);
-  headGroup.add(nose);
+  const rightEyebrow = new THREE.Mesh(browGeo, browMat);
+  rightEyebrow.position.set(0.1, 0.08, 0.25);
+  headGroup.add(rightEyebrow);
 
   // Mouth
-  const mouthGeo = new THREE.TorusGeometry(0.05, 0.015, 8, 16, Math.PI);
+  const mouthGeo = new THREE.TorusGeometry(0.05, 0.012, 8, 16, Math.PI);
   const mouth = new THREE.Mesh(mouthGeo, lipMat);
-  mouth.position.set(0, -0.12, 0.22);
+  mouth.position.set(0, -0.12, 0.23);
   mouth.rotation.set(0, 0, Math.PI);
   headGroup.add(mouth);
 
-  // ── LEFT ARM (viewer's right) ──
-  const leftUpperArmGroup = new THREE.Group();
-  leftUpperArmGroup.position.set(-0.48, 0.6, 0);
-  root.add(leftUpperArmGroup);
+  // ── LEFT ARM & ARTICULATED HAND ──
+  const leftUpperArm = new THREE.Group();
+  leftUpperArm.position.set(-0.48, 0.62, 0);
+  root.add(leftUpperArm);
 
-  // Shoulder sphere
   const shoulderGeo = new THREE.SphereGeometry(0.1, 12, 12);
   const leftShoulder = new THREE.Mesh(shoulderGeo, shirtMat);
-  leftUpperArmGroup.add(leftShoulder);
+  leftUpperArm.add(leftShoulder);
 
   const upperArmGeo = new THREE.CapsuleGeometry(0.07, 0.35, 6, 12);
   const leftUpperArmMesh = new THREE.Mesh(upperArmGeo, shirtMat);
   leftUpperArmMesh.position.set(0, -0.25, 0);
   leftUpperArmMesh.castShadow = true;
-  leftUpperArmGroup.add(leftUpperArmMesh);
+  leftUpperArm.add(leftUpperArmMesh);
 
-  // Left Forearm Group (attached at elbow)
-  const leftForearmGroup = new THREE.Group();
-  leftForearmGroup.position.set(0, -0.48, 0);
-  leftUpperArmGroup.add(leftForearmGroup);
-
-  // Elbow joint
-  const elbowGeo = new THREE.SphereGeometry(0.065, 10, 10);
-  const leftElbow = new THREE.Mesh(elbowGeo, skinMat);
-  leftForearmGroup.add(leftElbow);
+  const leftForearm = new THREE.Group();
+  leftForearm.position.set(0, -0.48, 0);
+  leftUpperArm.add(leftForearm);
 
   const forearmGeo = new THREE.CapsuleGeometry(0.055, 0.32, 6, 12);
   const leftForearmMesh = new THREE.Mesh(forearmGeo, skinMat);
   leftForearmMesh.position.set(0, -0.22, 0);
-  leftForearmMesh.castShadow = true;
-  leftForearmGroup.add(leftForearmMesh);
+  leftForearm.add(leftForearmMesh);
 
-  // Left Hand
-  const handGeo = new THREE.SphereGeometry(0.07, 10, 10);
-  const leftHand = new THREE.Mesh(handGeo, skinMat);
-  leftHand.scale.set(0.9, 1.2, 0.6);
-  leftHand.position.set(0, -0.42, 0);
-  leftHand.castShadow = true;
-  leftForearmGroup.add(leftHand);
+  // Left Hand Group
+  const leftHandGroup = new THREE.Group();
+  leftHandGroup.position.set(0, -0.42, 0);
+  leftForearm.add(leftHandGroup);
 
-  // Fingers for left hand
-  const fingerGeo = new THREE.CapsuleGeometry(0.015, 0.06, 4, 8);
+  const palmGeo = new THREE.BoxGeometry(0.09, 0.1, 0.035);
+  const leftPalm = new THREE.Mesh(palmGeo, skinMat);
+  leftHandGroup.add(leftPalm);
+
+  // 4 Articulated Fingers + Thumb
+  const fingerGeo = new THREE.CapsuleGeometry(0.012, 0.065, 4, 8);
+  const leftFingers: THREE.Mesh[] = [];
   for (let f = 0; f < 4; f++) {
     const finger = new THREE.Mesh(fingerGeo, skinMat);
-    finger.position.set(-0.04 + f * 0.025, -0.5, 0);
-    leftForearmGroup.add(finger);
+    finger.position.set(-0.036 + f * 0.024, -0.08, 0);
+    leftHandGroup.add(finger);
+    leftFingers.push(finger);
   }
-  // Thumb
-  const thumbGeo = new THREE.CapsuleGeometry(0.018, 0.05, 4, 8);
-  const leftThumb = new THREE.Mesh(thumbGeo, skinMat);
-  leftThumb.position.set(-0.06, -0.44, 0.02);
-  leftThumb.rotation.z = 0.5;
-  leftForearmGroup.add(leftThumb);
 
-  // ── RIGHT ARM (viewer's left) ──
-  const rightUpperArmGroup = new THREE.Group();
-  rightUpperArmGroup.position.set(0.48, 0.6, 0);
-  root.add(rightUpperArmGroup);
+  const thumbGeo = new THREE.CapsuleGeometry(0.015, 0.055, 4, 8);
+  const leftThumb = new THREE.Mesh(thumbGeo, skinMat);
+  leftThumb.position.set(-0.055, -0.02, 0.015);
+  leftThumb.rotation.z = 0.6;
+  leftHandGroup.add(leftThumb);
+
+  // ── RIGHT ARM & ARTICULATED HAND ──
+  const rightUpperArm = new THREE.Group();
+  rightUpperArm.position.set(0.48, 0.62, 0);
+  root.add(rightUpperArm);
 
   const rightShoulder = new THREE.Mesh(shoulderGeo, shirtMat);
-  rightUpperArmGroup.add(rightShoulder);
+  rightUpperArm.add(rightShoulder);
 
   const rightUpperArmMesh = new THREE.Mesh(upperArmGeo, shirtMat);
   rightUpperArmMesh.position.set(0, -0.25, 0);
   rightUpperArmMesh.castShadow = true;
-  rightUpperArmGroup.add(rightUpperArmMesh);
+  rightUpperArm.add(rightUpperArmMesh);
 
-  const rightForearmGroup = new THREE.Group();
-  rightForearmGroup.position.set(0, -0.48, 0);
-  rightUpperArmGroup.add(rightForearmGroup);
-
-  const rightElbow = new THREE.Mesh(elbowGeo, skinMat);
-  rightForearmGroup.add(rightElbow);
+  const rightForearm = new THREE.Group();
+  rightForearm.position.set(0, -0.48, 0);
+  rightUpperArm.add(rightForearm);
 
   const rightForearmMesh = new THREE.Mesh(forearmGeo, skinMat);
   rightForearmMesh.position.set(0, -0.22, 0);
-  rightForearmMesh.castShadow = true;
-  rightForearmGroup.add(rightForearmMesh);
+  rightForearm.add(rightForearmMesh);
 
-  const rightHand = new THREE.Mesh(handGeo, skinMat);
-  rightHand.scale.set(0.9, 1.2, 0.6);
-  rightHand.position.set(0, -0.42, 0);
-  rightHand.castShadow = true;
-  rightForearmGroup.add(rightHand);
+  // Right Hand Group
+  const rightHandGroup = new THREE.Group();
+  rightHandGroup.position.set(0, -0.42, 0);
+  rightForearm.add(rightHandGroup);
 
+  const rightPalm = new THREE.Mesh(palmGeo, skinMat);
+  rightHandGroup.add(rightPalm);
+
+  const rightFingers: THREE.Mesh[] = [];
   for (let f = 0; f < 4; f++) {
     const finger = new THREE.Mesh(fingerGeo, skinMat);
-    finger.position.set(-0.04 + f * 0.025, -0.5, 0);
-    rightForearmGroup.add(finger);
+    finger.position.set(-0.036 + f * 0.024, -0.08, 0);
+    rightHandGroup.add(finger);
+    rightFingers.push(finger);
   }
+
   const rightThumb = new THREE.Mesh(thumbGeo, skinMat);
-  rightThumb.position.set(0.06, -0.44, 0.02);
-  rightThumb.rotation.z = -0.5;
-  rightForearmGroup.add(rightThumb);
+  rightThumb.position.set(0.055, -0.02, 0.015);
+  rightThumb.rotation.z = -0.6;
+  rightHandGroup.add(rightThumb);
 
   return {
+    root,
     head: headGroup,
     torso,
-    leftUpperArm: leftUpperArmGroup,
-    leftForearm: leftForearmGroup,
-    leftHand,
-    rightUpperArm: rightUpperArmGroup,
-    rightForearm: rightForearmGroup,
-    rightHand,
+    leftUpperArm,
+    leftForearm,
+    leftHandGroup,
+    leftFingers,
+    leftThumb,
+    rightUpperArm,
+    rightForearm,
+    rightHandGroup,
+    rightFingers,
+    rightThumb,
+    leftEyebrow,
+    rightEyebrow,
   };
 }
 
-function applyPose(parts: HumanoidParts, pose: BodyPose) {
-  parts.head.rotation.z = pose.headTilt * DEG;
-  parts.head.rotation.x = pose.headNod * DEG;
-  parts.torso.rotation.y = pose.torsoTwist * DEG;
+function applyPoseToRig(rig: HumanoidRig, pose: BodyPoseFrame) {
+  // Head & Torso
+  rig.head.rotation.z = pose.headTilt * DEG;
+  rig.head.rotation.x = pose.headNod * DEG;
+  rig.torso.rotation.y = pose.torsoTwist * DEG;
 
-  // Arms: 0° = hanging down, 90° = horizontal, 140° = raised up
-  parts.leftUpperArm.rotation.z = (pose.leftUpperArm - 10) * DEG;
-  parts.rightUpperArm.rotation.z = -(pose.rightUpperArm - 10) * DEG;
+  // Facial Expression (Eyebrow height & tilt)
+  if (pose.facialExpression === 'questioning') {
+    rig.leftEyebrow.position.y = 0.11;
+    rig.rightEyebrow.position.y = 0.11;
+    rig.head.rotation.x = -6 * DEG;
+  } else if (pose.facialExpression === 'negation') {
+    rig.leftEyebrow.position.y = 0.07;
+    rig.rightEyebrow.position.y = 0.07;
+  } else {
+    rig.leftEyebrow.position.y = 0.08;
+    rig.rightEyebrow.position.y = 0.08;
+  }
 
-  // Forearms bend (negative = bend inward toward body)
-  parts.leftForearm.rotation.x = pose.leftForearm * DEG;
-  parts.rightForearm.rotation.x = pose.rightForearm * DEG;
+  // Upper arms (0 = hanging down, 90 = horizontal, 140 = raised)
+  rig.leftUpperArm.rotation.z = (pose.leftUpperArm - 10) * DEG;
+  rig.rightUpperArm.rotation.z = -(pose.rightUpperArm - 10) * DEG;
+
+  // Forearms
+  rig.leftForearm.rotation.x = pose.leftForearm * DEG;
+  rig.rightForearm.rotation.x = pose.rightForearm * DEG;
+
+  // Wrists
+  rig.leftHandGroup.rotation.z = pose.leftWrist * DEG;
+  rig.rightHandGroup.rotation.z = pose.rightWrist * DEG;
+
+  // Hand Shapes (Finger articulation)
+  adjustHandShape(rig.rightFingers, rig.rightThumb, pose.rightHandShape, false);
+  adjustHandShape(rig.leftFingers, rig.leftThumb, pose.leftHandShape, true);
+}
+
+function adjustHandShape(
+  fingers: THREE.Mesh[],
+  thumb: THREE.Mesh,
+  shape: BodyPoseFrame['rightHandShape'],
+  isLeft: boolean
+) {
+  const sign = isLeft ? 1 : -1;
+
+  if (shape === 'fist') {
+    // All fingers curled
+    fingers.forEach(f => { f.rotation.x = Math.PI * 0.45; f.position.z = 0.03; });
+    thumb.rotation.z = sign * 0.2;
+    thumb.position.z = 0.04;
+  } else if (shape === 'point_index') {
+    // Only index finger extended (index is finger 0 or 3 depending on hand)
+    const indexIdx = isLeft ? 3 : 0;
+    fingers.forEach((f, idx) => {
+      if (idx === indexIdx) {
+        f.rotation.x = 0;
+        f.position.z = 0;
+      } else {
+        f.rotation.x = Math.PI * 0.45;
+        f.position.z = 0.03;
+      }
+    });
+    thumb.rotation.z = sign * 0.3;
+  } else if (shape === 'v_shape') {
+    // Index and Middle extended
+    fingers.forEach((f, idx) => {
+      if (idx <= 1) {
+        f.rotation.x = 0;
+        f.rotation.z = (idx === 0 ? -0.2 : 0.2) * sign;
+        f.position.z = 0;
+      } else {
+        f.rotation.x = Math.PI * 0.45;
+        f.position.z = 0.03;
+      }
+    });
+  } else if (shape === 'thumbs_up') {
+    fingers.forEach(f => { f.rotation.x = Math.PI * 0.45; f.position.z = 0.03; });
+    thumb.rotation.z = sign * 1.2;
+    thumb.position.y = 0.03;
+  } else if (shape === 'pinch' || shape === 'flat_o') {
+    fingers.forEach(f => { f.rotation.x = 0.3; f.position.z = 0.02; });
+    thumb.rotation.z = sign * 0.4;
+    thumb.position.z = 0.03;
+  } else {
+    // Open palm / neutral
+    fingers.forEach(f => { f.rotation.x = 0; f.rotation.z = 0; f.position.z = 0; });
+    thumb.rotation.z = sign * 0.6;
+    thumb.position.set(sign * 0.055, -0.02, 0.015);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   MAIN COMPONENT
+   MAIN SIGN LANGUAGE PRESENTER COMPONENT
    ═══════════════════════════════════════════════════════════════ */
 
 export const SignLanguagePresenter: React.FC = () => {
   const { signLanguageModalOpen, signLanguageTerm, setSignLanguageModalOpen, language } = useStore();
   const isAr = language === 'ar';
 
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const partsRef = useRef<HumanoidParts | null>(null);
-  const frameRef = useRef<number>(0);
-  const currentPoseRef = useRef<BodyPose>({ ...NEUTRAL });
-  const targetPoseRef = useRef<BodyPose>({ ...NEUTRAL });
+  const rigRef = useRef<HumanoidRig | null>(null);
+  const frameIdRef = useRef<number>(0);
 
-  const [segments, setSegments] = useState<ParsedSegment[]>([]);
-  const [segIdx, setSegIdx] = useState(0);
+  const currentPoseRef = useRef<BodyPoseFrame>({ ...NEUTRAL_POSE });
+  const targetPoseRef = useRef<BodyPoseFrame>({ ...NEUTRAL_POSE });
+
+  // State
+  const [inputText, setInputText] = useState('');
+  const [translationResult, setTranslationResult] = useState<SignTranslationResponse | null>(null);
+  const [currentSignIdx, setCurrentSignIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [speed, setSpeed] = useState(1);
-  const [targetPose, setTargetPose] = useState<BodyPose>(NEUTRAL);
+  const [speed, setSpeed] = useState<number>(1.0);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [cameraView, setCameraView] = useState<'standard' | 'hands' | 'orbit'>('standard');
 
-  // Sync targetPoseRef whenever targetPose updates
+  // Load and translate text into ArSL sequences
+  const performTranslation = useCallback(async (textToTranslate: string) => {
+    if (!textToTranslate.trim()) return;
+    setIsTranslating(true);
+
+    try {
+      const res = await SignLanguageService.translateTextToSigns(textToTranslate, speed);
+      setTranslationResult(res);
+      setCurrentSignIdx(0);
+      setIsPlaying(true);
+    } catch (err) {
+      console.error('[SignLanguagePresenter] Error translating to signs:', err);
+    } finally {
+      setIsTranslating(false);
+    }
+  }, [speed]);
+
+  // Trigger translation when modal opens or signLanguageTerm changes
   useEffect(() => {
-    targetPoseRef.current = targetPose;
-  }, [targetPose]);
+    if (signLanguageModalOpen) {
+      const initialText = signLanguageTerm || (isAr ? 'الذكاء الاصطناعي والشبكات العصبية خطوة بخطوة' : 'Artificial Intelligence and Neural Networks step by step');
+      setInputText(initialText);
+      performTranslation(initialText);
+    }
+  }, [signLanguageModalOpen, signLanguageTerm, isAr, performTranslation]);
 
   // Close on Escape key
   useEffect(() => {
@@ -619,103 +407,86 @@ export const SignLanguagePresenter: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [signLanguageModalOpen, setSignLanguageModalOpen]);
 
-  // Parse text into phrase segments with default fallback
+  // Initialize Three.js WebGL Scene
   useEffect(() => {
-    const textToParse = signLanguageTerm || (isAr ? 'الذكاء الاصطناعي يوفر الكثير من الفرص' : 'Artificial Intelligence provides many opportunities');
-    const parsed = parseTextToPhrases(textToParse);
-    setSegments(parsed);
-    setSegIdx(0);
-    setIsPlaying(true);
-  }, [signLanguageTerm, isAr]);
+    if (!signLanguageModalOpen || !containerRef.current) return;
 
-  // Initialize Three.js scene
-  useEffect(() => {
-    if (!signLanguageModalOpen || !canvasRef.current) return;
+    const container = containerRef.current;
+    const w = container.clientWidth || 640;
+    const h = container.clientHeight || 420;
 
-    const container = canvasRef.current;
-    const w = container.clientWidth || 600;
-    const h = container.clientHeight || 400;
-
-    // Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a1628);
-    scene.fog = new THREE.Fog(0x0a1628, 4, 8);
+    scene.background = new THREE.Color(0x070d19);
+    scene.fog = new THREE.Fog(0x070d19, 3.5, 9);
     sceneRef.current = scene;
 
-    // Camera
-    const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 20);
-    camera.position.set(0, 0.8, 3.2);
-    camera.lookAt(0, 0.5, 0);
+    const camera = new THREE.PerspectiveCamera(34, w / h, 0.1, 20);
+    camera.position.set(0, 0.75, 3.1);
+    camera.lookAt(0, 0.45, 0);
     cameraRef.current = camera;
 
-    // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.25;
+    container.innerHTML = '';
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x8899bb, 0.6);
+    // Studio Lighting
+    const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.7);
     scene.add(ambientLight);
 
-    const mainLight = new THREE.DirectionalLight(0xfff5e8, 1.8);
-    mainLight.position.set(2, 4, 3);
-    mainLight.castShadow = true;
-    mainLight.shadow.mapSize.set(1024, 1024);
-    scene.add(mainLight);
+    const keyLight = new THREE.DirectionalLight(0xfff8ee, 1.8);
+    keyLight.position.set(2, 4, 3);
+    keyLight.castShadow = true;
+    scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x88ccee, 0.4);
-    fillLight.position.set(-2, 2, -1);
+    const fillLight = new THREE.DirectionalLight(0x00d9c0, 0.5);
+    fillLight.position.set(-2.5, 2, 1);
     scene.add(fillLight);
 
-    const rimLight = new THREE.PointLight(0x14b8a6, 0.6, 6);
-    rimLight.position.set(0, 1.5, -2);
+    const rimLight = new THREE.PointLight(0xa855f7, 0.9, 8);
+    rimLight.position.set(0, 1.8, -2.5);
     scene.add(rimLight);
 
-    // Floor (subtle)
-    const floorGeo = new THREE.CircleGeometry(2, 32);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x0d1f33, roughness: 0.95 });
+    // Floor platform
+    const floorGeo = new THREE.CircleGeometry(1.8, 32);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -0.35;
-    floor.receiveShadow = true;
+    floor.position.y = -0.4;
     scene.add(floor);
 
-    // Build humanoid
-    const parts = createHumanoid(scene);
-    partsRef.current = parts;
+    // Build Rig
+    const rig = createHumanoidRig(scene);
+    rigRef.current = rig;
 
-    // Animation loop using targetPoseRef
+    // Smooth Animation Loop
     const animate = () => {
-      frameRef.current = requestAnimationFrame(animate);
-      
+      frameIdRef.current = requestAnimationFrame(animate);
+
       const cur = currentPoseRef.current;
       const tgt = targetPoseRef.current;
-      const lerpSpeed = 0.08;
-      currentPoseRef.current = lerpPose(cur, tgt, lerpSpeed);
-      
-      if (parts) {
-        applyPose(parts, currentPoseRef.current);
-        
-        // Subtle idle breathing
-        const t = Date.now() * 0.001;
-        parts.torso.position.y = 0.3 + Math.sin(t * 1.5) * 0.008;
-        parts.head.position.y = 1.1 + Math.sin(t * 1.5) * 0.005;
+      currentPoseRef.current = lerpPose(cur, tgt, 0.08);
+
+      if (rigRef.current) {
+        applyPoseToRig(rigRef.current, currentPoseRef.current);
+
+        // Natural micro-breathing motion
+        const time = Date.now() * 0.0015;
+        rigRef.current.torso.position.y = 0.3 + Math.sin(time) * 0.006;
+        rigRef.current.head.position.y = 1.12 + Math.sin(time) * 0.004;
       }
 
       renderer.render(scene, camera);
     };
     animate();
 
-
-
-    // Resize handler
-    const onResize = () => {
+    const handleResize = () => {
       if (!container || !camera || !renderer) return;
       const nw = container.clientWidth;
       const nh = container.clientHeight;
@@ -723,11 +494,11 @@ export const SignLanguagePresenter: React.FC = () => {
       camera.updateProjectionMatrix();
       renderer.setSize(nw, nh);
     };
-    window.addEventListener('resize', onResize);
+    window.addEventListener('resize', handleResize);
 
     return () => {
-      window.removeEventListener('resize', onResize);
-      cancelAnimationFrame(frameRef.current);
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(frameIdRef.current);
       renderer.dispose();
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
@@ -735,243 +506,302 @@ export const SignLanguagePresenter: React.FC = () => {
     };
   }, [signLanguageModalOpen]);
 
-  // Update target pose when it changes externally
-  useEffect(() => {
-    // The animation loop reads targetPose via closure
-  }, [targetPose]);
+  // Camera preset handler
+  const setCameraPreset = (mode: 'standard' | 'hands' | 'orbit') => {
+    setCameraView(mode);
+    const camera = cameraRef.current;
+    if (!camera) return;
 
-  // Phrase playback engine
+    if (mode === 'hands') {
+      camera.position.set(0, 0.45, 1.8);
+      camera.lookAt(0, 0.35, 0);
+    } else if (mode === 'orbit') {
+      camera.position.set(1.2, 0.8, 2.5);
+      camera.lookAt(0, 0.45, 0);
+    } else {
+      camera.position.set(0, 0.75, 3.1);
+      camera.lookAt(0, 0.45, 0);
+    }
+  };
+
+  // Playback Sequencer Engine
   useEffect(() => {
-    if (!isPlaying || segments.length === 0) {
-      if (!isPlaying) setTargetPose(NEUTRAL);
+    if (!isPlaying || !translationResult || translationResult.signs.length === 0) {
+      if (!isPlaying) targetPoseRef.current = { ...NEUTRAL_POSE };
       return;
     }
 
-    const seg = segments[segIdx];
-    if (!seg) return;
+    const currentSign = translationResult.signs[currentSignIdx];
+    if (!currentSign || currentSign.poses.length === 0) return;
 
-    const poses = seg.sign.poses;
-    const totalDur = seg.sign.durationMs / speed;
-    const poseInterval = totalDur / poses.length;
-    let poseIdx = 0;
+    const poses = currentSign.poses;
+    const signDur = currentSign.durationMs;
+    const poseInterval = Math.max(100, Math.floor(signDur / poses.length));
+    let frameIdx = 0;
 
-    // Start first pose immediately
-    setTargetPose(poses[0]);
+    targetPoseRef.current = poses[0];
 
-    const intervalId = setInterval(() => {
-      poseIdx++;
-      if (poseIdx < poses.length) {
-        setTargetPose(poses[poseIdx]);
+    const frameInterval = setInterval(() => {
+      frameIdx++;
+      if (frameIdx < poses.length) {
+        targetPoseRef.current = poses[frameIdx];
       }
     }, poseInterval);
 
-    // After full phrase duration, move to next segment
-    const nextTimer = setTimeout(() => {
-      clearInterval(intervalId);
-      if (segIdx < segments.length - 1) {
-        setSegIdx(prev => prev + 1);
+    const signTimer = setTimeout(() => {
+      clearInterval(frameInterval);
+      if (currentSignIdx < translationResult.signs.length - 1) {
+        setCurrentSignIdx(prev => prev + 1);
       } else {
         setIsPlaying(false);
-        setTargetPose(NEUTRAL);
+        targetPoseRef.current = { ...NEUTRAL_POSE };
       }
-    }, totalDur + 200);
+    }, signDur + 80);
 
     return () => {
-      clearInterval(intervalId);
-      clearTimeout(nextTimer);
+      clearInterval(frameInterval);
+      clearTimeout(signTimer);
     };
-  }, [segIdx, isPlaying, segments, speed]);
+  }, [currentSignIdx, isPlaying, translationResult]);
 
   if (!signLanguageModalOpen) return null;
 
-  const currentSeg = segments[segIdx];
-  const progress = segments.length > 0 ? ((segIdx + 1) / segments.length) * 100 : 0;
+  const currentSign = translationResult?.signs[currentSignIdx];
+  const totalSigns = translationResult?.signs.length || 0;
+  const progressPct = totalSigns > 0 ? ((currentSignIdx + 1) / totalSigns) * 100 : 0;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
-      style={{ background: 'rgba(2, 6, 23, 0.9)', backdropFilter: 'blur(10px)' }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 backdrop-blur-md bg-black/85 animate-fade-in"
       dir={isAr ? 'rtl' : 'ltr'}
       onClick={(e) => { if (e.target === e.currentTarget) setSignLanguageModalOpen(false); }}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="sign-presenter-title"
     >
-      <div
-        className="relative w-full max-w-5xl max-h-[92vh] rounded-3xl overflow-hidden flex flex-col"
-        style={{
-          background: 'linear-gradient(145deg, #0d1b2a 0%, #0a1628 100%)',
-          border: '1px solid rgba(20, 184, 166, 0.15)',
-          boxShadow: '0 0 80px rgba(20, 184, 166, 0.06), 0 32px 64px rgba(0,0,0,0.5)',
-        }}
-      >
-        {/* ── Header ── */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800/60">
+      <div className="relative w-full max-w-5xl max-h-[92vh] rounded-3xl overflow-hidden flex flex-col bg-gradient-to-br from-slate-900 via-slate-900 to-[#0a1628] border border-teal-500/30 shadow-2xl shadow-teal-950/40">
+        
+        {/* ── Top Header ── */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-900/60">
           <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #14b8a6, #0d9488)', boxShadow: '0 4px 15px rgba(20,184,166,0.3)' }}
-            >
-              <Hand className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center text-white shadow-lg shadow-teal-500/25 shrink-0">
+              <Hand className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">
-                {isAr ? 'مترجم لغة الإشارة العربية' : 'Arabic Sign Language Presenter'}
-              </h2>
-              <div className="flex items-center gap-2 text-[11px] font-medium">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-extrabold text-white">
+                  {isAr ? 'المترجم الإشاري الذكي 3D (ArSL Generation)' : 'Autonomous 3D Sign Language Presenter'}
+                </h2>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/10 text-teal-400 border border-teal-500/30 font-bold uppercase flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  <span>{isAr ? 'عصبي-رمزي هجين' : 'Neuro-Symbolic'}</span>
                 </span>
-                <span className="text-teal-400">
-                  {isPlaying ? (isAr ? 'يترجم الآن بالمعنى...' : 'Translating by meaning...') : (isAr ? 'متوقف' : 'Paused')}
-                </span>
-                <span className="text-slate-600">•</span>
-                <span className="text-slate-500 text-[10px]">3D ArSL • {isAr ? 'ترجمة بالعبارات' : 'Phrase-based'}</span>
               </div>
+              <p className="text-[11px] text-slate-400 font-medium">
+                {isAr ? 'توليد لغة الإشارة العربية وفق القاموس الموحد والأبجدية اليدوية' : 'Unified Arab Sign Language standard with authentic fingerspelling'}
+              </p>
             </div>
           </div>
-          <button
-            onClick={() => setSignLanguageModalOpen(false)}
-            className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          <div className="flex items-center gap-2">
+            {/* Camera View Selector */}
+            <div className="flex items-center bg-slate-800/80 p-0.5 rounded-xl border border-slate-700/60 text-xs text-slate-400">
+              <button
+                onClick={() => setCameraPreset('standard')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition ${cameraView === 'standard' ? 'bg-teal-500 text-white shadow-xs' : 'hover:text-white'}`}
+                title="منظر قياسي"
+              >
+                {isAr ? 'عام' : 'Full'}
+              </button>
+              <button
+                onClick={() => setCameraPreset('hands')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition ${cameraView === 'hands' ? 'bg-teal-500 text-white shadow-xs' : 'hover:text-white'}`}
+                title="تقريب على الأيدي والأصابع"
+              >
+                {isAr ? 'اليدين' : 'Hands'}
+              </button>
+              <button
+                onClick={() => setCameraPreset('orbit')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition ${cameraView === 'orbit' ? 'bg-teal-500 text-white shadow-xs' : 'hover:text-white'}`}
+                title="منظر مائل 45 درجة"
+              >
+                {isAr ? 'مائل' : 'Angle'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => setSignLanguageModalOpen(false)}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* ── Main Layout ── */}
+        {/* ── Main Workspace ── */}
         <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-          {/* 3D Canvas Stage */}
-          <div
-            ref={canvasRef}
-            className="flex-1 relative"
-            style={{ minHeight: 400 }}
-          >
-            {/* Current meaning subtitle */}
-            {currentSeg && (
-              <div className="absolute bottom-5 inset-x-0 flex justify-center z-20 pointer-events-none">
-                <div
-                  className="px-5 py-2 rounded-2xl backdrop-blur-md border max-w-[80%]"
-                  style={{ background: 'rgba(10, 22, 40, 0.85)', borderColor: 'rgba(20, 184, 166, 0.2)' }}
-                >
-                  <div className="text-[10px] text-teal-400 font-bold uppercase tracking-wider mb-0.5 text-center">
-                    {isAr ? 'المعنى بالإشارة' : 'Sign Meaning'}
+          
+          {/* 3D Stage (Left / Main Area) */}
+          <div ref={containerRef} className="flex-1 relative min-h-[380px] lg:min-h-[440px]">
+            {/* Live Translating Indicator */}
+            {isTranslating && (
+              <div className="absolute top-4 left-4 z-20 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-950/80 border border-teal-500/40 text-teal-300 text-xs font-bold animate-pulse">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>{isAr ? 'الذكاء الاصطناعي يحلل قواعد لغة الإشارة...' : 'AI Synthesizing Sign Kinematics...'}</span>
+              </div>
+            )}
+
+            {/* Subtitle HUD Card */}
+            {currentSign && (
+              <div className="absolute bottom-4 inset-x-0 flex justify-center z-20 pointer-events-none px-4">
+                <div className="px-5 py-2.5 rounded-2xl backdrop-blur-md bg-slate-950/85 border border-teal-500/30 max-w-lg w-full text-center shadow-xl space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-teal-400">
+                    <span className="uppercase tracking-wider">
+                      {currentSign.isFingerspelled 
+                        ? (isAr ? '🔤 تهجئة إشارية بالحروف' : '🔤 Fingerspelling')
+                        : (isAr ? '✨ إشارة دلالية معتمدة' : '✨ ArSL Core Gloss')
+                      }
+                    </span>
+                    <span className="text-slate-400 text-[10px]">
+                      {currentSignIdx + 1} / {totalSigns}
+                    </span>
                   </div>
-                  <div className="text-xl font-bold text-amber-400 text-center">
-                    {isAr ? currentSeg.sign.meaningAr : currentSeg.sign.meaningEn}
+                  <div className="text-xl sm:text-2xl font-black text-amber-400">
+                    {currentSign.arabicText}
+                  </div>
+                  <div className="text-xs text-slate-300 font-medium">
+                    {currentSign.englishTranslation}
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Right Panel */}
-          <div className="w-full lg:w-[320px] flex flex-col border-t lg:border-t-0 lg:border-r border-slate-800/50" style={{ background: 'rgba(10,18,30,0.7)' }}>
-            {/* Original text */}
-            <div className="flex-1 p-5 overflow-y-auto">
-              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">
-                {isAr ? '📝 النص الأصلي' : '📝 Original Text'}
-              </h3>
-              <div className="space-y-1.5">
-                {segments.map((seg, i) => (
-                  <span
-                    key={i}
-                    className={`inline text-sm leading-[2.2] transition-all duration-500 px-1.5 py-0.5 rounded-lg mx-0.5 ${
-                      i === segIdx
-                        ? 'bg-amber-500/20 text-amber-300 font-bold'
-                        : i < segIdx
-                        ? 'text-slate-600'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    {seg.text}{' '}
-                  </span>
-                ))}
-              </div>
-
-              {/* Current phrase info */}
-              {currentSeg && (
-                <div className="mt-4 p-3 rounded-xl border" style={{ background: 'rgba(20,184,166,0.05)', borderColor: 'rgba(20,184,166,0.15)' }}>
-                  <div className="text-[10px] text-teal-400 font-bold uppercase tracking-wider mb-1.5">
-                    {isAr ? 'العبارة الحالية' : 'Current Phrase'}
-                  </div>
-                  <div className="text-sm text-white font-medium">"{currentSeg.text}"</div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    → {isAr ? currentSeg.sign.meaningAr : currentSeg.sign.meaningEn}
-                  </div>
-                  <div className="text-[10px] text-slate-600 mt-1">
-                    {currentSeg.sign.poses.length} {isAr ? 'حركات إشارية' : 'gesture motions'}
-                  </div>
-                </div>
-              )}
+          {/* Controller & Gloss Panel (Right Side) */}
+          <div className="w-full lg:w-[340px] flex flex-col border-t lg:border-t-0 lg:border-r border-slate-800 bg-slate-900/70 p-4 space-y-4">
+            
+            {/* Live Custom Text Input */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-400 block">
+                {isAr ? '✍️ اكتب أي جملة لتوليد لغة الإشارة فوراً:' : '✍️ Type any text to generate sign language:'}
+              </label>
+              <form 
+                onSubmit={(e) => { e.preventDefault(); performTranslation(inputText); }}
+                className="flex items-center gap-1.5"
+              >
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder={isAr ? 'اكتب كلمة أو سؤال هنا...' : 'Type words or questions...'}
+                  className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-teal-500 transition font-medium"
+                />
+                <button
+                  type="submit"
+                  disabled={isTranslating}
+                  className="px-3 py-2 rounded-xl bg-teal-500 hover:bg-teal-600 disabled:opacity-40 text-white font-bold text-xs transition flex items-center justify-center shrink-0 shadow-md shadow-teal-500/20"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
             </div>
 
-            {/* Controls */}
-            <div className="p-4 border-t border-slate-800/50">
-              {/* Progress */}
-              <div className="mb-3">
-                <div className="flex justify-between text-[10px] text-slate-500 font-medium mb-1.5">
-                  <span>{isAr ? `عبارة ${segIdx + 1} من ${segments.length}` : `Phrase ${segIdx + 1} of ${segments.length}`}</span>
-                  <span>{Math.round(progress)}%</span>
+            {/* Gloss Sequence Stream */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[140px] max-h-[220px]">
+              <div className="flex items-center justify-between text-[11px] font-extrabold text-slate-400 border-b border-slate-800 pb-1">
+                <span>{isAr ? 'سلسلة المقاطع الإشارية (Glosses):' : 'ArSL Sign Stream:'}</span>
+                <span className="text-teal-400 text-[10px]">{totalSigns} {isAr ? 'إشارة' : 'signs'}</span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {translationResult?.signs.map((sign, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => { setCurrentSignIdx(idx); setIsPlaying(true); }}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 border ${
+                      idx === currentSignIdx
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
+                        : idx < currentSignIdx
+                        ? 'bg-slate-950/60 text-slate-500 border-slate-800'
+                        : 'bg-slate-800/60 text-slate-300 border-slate-700/60 hover:border-teal-500/40'
+                    }`}
+                  >
+                    <span>{sign.arabicText}</span>
+                    {sign.isFingerspelled && <span className="text-[9px] text-teal-400">🔤</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Player Navigation & Speed Controls */}
+            <div className="pt-3 border-t border-slate-800 space-y-3">
+              {/* Progress bar */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[10px] text-slate-400 font-bold">
+                  <span>{isAr ? `إشارة ${currentSignIdx + 1} من ${totalSigns}` : `Sign ${currentSignIdx + 1} of ${totalSigns}`}</span>
+                  <span>{Math.round(progressPct)}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full transition-all duration-700 ease-out"
-                    style={{ width: `${progress}%`, background: 'linear-gradient(90deg, #14b8a6, #34d399)' }}
+                    className="h-full rounded-full transition-all duration-300 bg-gradient-to-r from-teal-400 to-emerald-400"
+                    style={{ width: `${progressPct}%` }}
                   />
                 </div>
               </div>
 
-              {/* Buttons */}
-              <div className="flex items-center justify-center gap-3">
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-2">
                 <button
-                  onClick={() => { setSegIdx(0); setIsPlaying(true); }}
-                  className="p-2.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl transition-all"
+                  onClick={() => { setCurrentSignIdx(0); setIsPlaying(true); }}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
+                  title="إعادة من البداية"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
 
                 <button
-                  onClick={() => { if (segIdx > 0) { setSegIdx(segIdx - 1); setIsPlaying(true); } }}
-                  disabled={segIdx === 0}
-                  className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl disabled:opacity-25 transition-all"
+                  onClick={() => { if (currentSignIdx > 0) { setCurrentSignIdx(c => c - 1); setIsPlaying(true); } }}
+                  disabled={currentSignIdx === 0}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl disabled:opacity-30 transition"
+                  title="الإشارة السابقة"
                 >
                   <SkipBack className="w-4 h-4" />
                 </button>
 
                 <button
                   onClick={() => {
-                    if (!isPlaying && segIdx >= segments.length - 1) setSegIdx(0);
+                    if (!isPlaying && currentSignIdx >= totalSigns - 1) setCurrentSignIdx(0);
                     setIsPlaying(!isPlaying);
                   }}
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all transform hover:scale-105 active:scale-95"
-                  style={{ background: 'linear-gradient(135deg, #14b8a6, #0d9488)', boxShadow: '0 0 24px rgba(20,184,166,0.3)' }}
+                  className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 text-white flex items-center justify-center shadow-lg shadow-teal-500/30 hover:scale-105 active:scale-95 transition"
+                  title={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
                 >
-                  {isPlaying
-                    ? <Pause className="w-6 h-6 text-white" style={{ fill: 'white' }} />
-                    : <Play className="w-6 h-6 text-white" style={{ fill: 'white', marginLeft: 2 }} />
-                  }
+                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                 </button>
 
                 <button
-                  onClick={() => { if (segIdx < segments.length - 1) { setSegIdx(segIdx + 1); setIsPlaying(true); } }}
-                  disabled={segIdx >= segments.length - 1}
-                  className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-xl disabled:opacity-25 transition-all"
+                  onClick={() => { if (currentSignIdx < totalSigns - 1) { setCurrentSignIdx(c => c + 1); setIsPlaying(true); } }}
+                  disabled={currentSignIdx >= totalSigns - 1}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl disabled:opacity-30 transition"
+                  title="الإشارة التالية"
                 >
                   <SkipForward className="w-4 h-4" />
                 </button>
 
+                {/* Speed toggle */}
                 <button
-                  onClick={() => setSpeed(s => s === 1 ? 1.5 : s === 1.5 ? 0.5 : 1)}
-                  className="px-3 py-2 text-sm font-bold rounded-xl hover:bg-slate-800 transition-all"
-                  style={{ color: speed !== 1 ? '#14b8a6' : '#64748b' }}
+                  onClick={() => setSpeed(s => s === 1.0 ? 0.75 : s === 0.75 ? 0.5 : s === 0.5 ? 1.25 : 1.0)}
+                  className="px-2.5 py-1.5 text-xs font-black rounded-xl bg-slate-800 text-teal-300 border border-slate-700 hover:border-teal-500/50 transition"
+                  title="سرعة العرض"
                 >
                   {speed}x
                 </button>
               </div>
             </div>
+
           </div>
+
         </div>
+
       </div>
     </div>
   );
