@@ -1,8 +1,4 @@
 # Vercel-compatible lightweight requirements
-# Heavy ML libs (sentence-transformers, faiss-cpu, PyTorch) are excluded
-# to stay under Vercel's 500MB function size limit.
-# RAG/Moodle vector search will gracefully degrade without them.
-
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
@@ -16,3 +12,8 @@ requests>=2.31.0
 edge-tts>=6.1.0
 gTTS>=2.5.0
 langchain-groq>=0.1.0
+sqlalchemy>=2.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+reportlab>=4.0.0
+PyPDF2>=3.0.0
