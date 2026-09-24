@@ -1,8 +1,3 @@
-# Vercel-compatible lightweight requirements
-# Heavy ML libs (sentence-transformers, faiss-cpu, PyTorch) are excluded
-# to stay under Vercel's 500MB function size limit.
-# RAG/Moodle vector search will gracefully degrade without them.
-
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 pydantic>=2.6.0

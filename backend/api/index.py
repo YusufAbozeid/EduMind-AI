@@ -7,10 +7,11 @@ import os
 
 # Add backend directory to Python path so imports work correctly
 backend_dir = os.path.join(os.path.dirname(__file__), '..')
-sys.path.insert(0, backend_dir)
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
-# Import the FastAPI app from server.py
-from server import app
+# Import the FastAPI app from app.main
+from app.main import app
 
-# Vercel looks for a variable called 'app' or 'handler'
-# FastAPI/Starlette apps are ASGI-compatible, which Vercel supports
+handler = app
+
