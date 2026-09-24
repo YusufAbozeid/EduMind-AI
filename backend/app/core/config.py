@@ -24,8 +24,9 @@ class Settings(BaseSettings):
         "http://localhost:8080",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8000",
-        # Production origins (Cloudflare Pages)
+        # Production origins
         "https://shaghoof-ai.pages.dev",
+        "https://shaghoof-ai.vercel.app",
     ]
     
     # Rate Limiting Controls
